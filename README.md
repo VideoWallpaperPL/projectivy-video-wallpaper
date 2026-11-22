@@ -33,11 +33,12 @@ The screenshots use original illustrative graphics created for this project.
 
 You need Android TV or Google TV running Android 7.0 or newer, plus Projectivy Launcher with Premium enabled for external wallpaper providers. [Projectivy plugin guide](https://projectivylauncher.com/plugins.html), [Projectivy’s Overflight listing](https://play.google.com/store/apps/details?id=tv.projectivy.plugin.wallpaperprovider.overflight)
 
-Build a debug APK from this source, or use a signed APK when one is available from this repository’s GitHub Releases. This project uses manual sideloading.
+The current release provides source code. Build a debug APK locally and sideload it using the steps below. [GitHub Releases](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases)
 
-1. Install [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) on your computer.
-2. Enable debugging on the TV and connect using the options shown by the device. Approve the computer’s debugging prompt on the TV.
-3. Confirm that `adb devices` lists the TV, then install the APK. Use `-s <device-serial>` when more than one device is connected.
+1. Get the source, set up the [build prerequisites](#build-and-test), and run `./gradlew :app:assembleDebug` from the project directory.
+2. Install [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) on your computer.
+3. Enable debugging on the TV and connect using the options shown by the device. Approve the computer’s debugging prompt on the TV.
+4. Confirm that `adb devices` lists the TV, then install the APK. Use `-s <device-serial>` when more than one device is connected.
 
 ```sh
 adb devices
@@ -62,8 +63,6 @@ Use JDK 17, Android SDK Platform 35, and Build Tools 35.0.0. Configure the SDK t
 
 The tests cover YouTube link parsing and wallpaper history, including capacity, replacement, selection, and deletion. [GitHub Actions](.github/workflows/android.yml) runs the tests and lint and assembles an unsigned release APK. The Gradle distribution and yt-dlp zipapp have pinned checksums. Debug APK signatures depend on the build machine’s debug key.
 
-## License and publication
+## License
 
-Original code and artwork are licensed under [GPL-3.0-only](LICENSE). The vendored Projectivy provider API remains under [Apache-2.0](licenses/projectivy-api.txt). See [Third-party licenses](THIRD_PARTY_LICENSES.md) for the dependency inventory, retained notices, and the outstanding native-runtime source and attribution checks.
-
-Start with a source-only GitHub repository named `projectivy-video-wallpaper`. Before attaching a signed APK to a release, complete the binary redistribution checks in [Third-party licenses](THIRD_PARTY_LICENSES.md) and keep the release signing key private. Release attachments are limited to the application APK and related documentation. [Android app-signing guide](https://developer.android.com/studio/publish/app-signing)
+Original code and artwork are licensed under [GPL-3.0-only](LICENSE). The vendored Projectivy provider API remains under [Apache-2.0](licenses/projectivy-api.txt). Dependency licenses and attribution are listed in [Third-party licenses](THIRD_PARTY_LICENSES.md).
