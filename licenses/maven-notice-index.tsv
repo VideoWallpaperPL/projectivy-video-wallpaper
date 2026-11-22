@@ -1,0 +1,11 @@
+coordinate	artifact-entry	retained-copy
+androidx.annotation:annotation-jvm:1.9.1	annotation-jvm-1.9.1.jar!META-INF/androidx/annotation/annotation/LICENSE.txt	maven-notices/annotation-jvm-1.9.1-LICENSE.txt
+com.fasterxml.jackson.core:jackson-annotations:2.11.1	jackson-annotations-2.11.1.jar!META-INF/LICENSE	maven-notices/jackson-annotations-2.11.1-LICENSE
+com.fasterxml.jackson.core:jackson-core:2.11.1	jackson-core-2.11.1.jar!META-INF/LICENSE	maven-notices/jackson-core-2.11.1-LICENSE
+com.fasterxml.jackson.core:jackson-core:2.11.1	jackson-core-2.11.1.jar!META-INF/NOTICE	maven-notices/jackson-core-2.11.1-NOTICE
+com.fasterxml.jackson.core:jackson-databind:2.11.1	jackson-databind-2.11.1.jar!META-INF/LICENSE	maven-notices/jackson-databind-2.11.1-LICENSE
+com.fasterxml.jackson.core:jackson-databind:2.11.1	jackson-databind-2.11.1.jar!META-INF/NOTICE	maven-notices/jackson-databind-2.11.1-NOTICE
+commons-io:commons-io:2.5	commons-io-2.5.jar!META-INF/LICENSE.txt	maven-notices/commons-io-2.5-LICENSE.txt
+commons-io:commons-io:2.5	commons-io-2.5.jar!META-INF/NOTICE.txt	maven-notices/commons-io-2.5-NOTICE.txt
+org.apache.commons:commons-compress:1.12	commons-compress-1.12.jar!META-INF/LICENSE.txt	maven-notices/commons-compress-1.12-LICENSE.txt
+org.apache.commons:commons-compress:1.12	commons-compress-1.12.jar!META-INF/NOTICE.txt	maven-notices/commons-compress-1.12-NOTICE.txt

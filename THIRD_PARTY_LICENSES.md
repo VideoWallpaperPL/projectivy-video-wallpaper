@@ -1,0 +1,32 @@
+# Third-party licenses
+
+Original project code uses GPL-3.0-only. The Android app links to the GPL-3.0 youtubedl-android wrapper, so GPLv3 is the selected license for the combined application. The vendored Apache-2.0 provider API retains its original license. Apache-2.0 code can be incorporated into a GPLv3 project while retaining the applicable Apache notices. [Apache Software Foundation compatibility guidance](https://www.apache.org/licenses/GPL-compatibility.html)
+
+## Provider API, extractor, and Android libraries
+
+| Component | Review result | Source and notices |
+| --- | --- | --- |
+| Projectivy wallpaper provider API v1 | Apache-2.0. The Kotlin and AIDL contract files under `tv/projectivy/plugin/wallpaperprovider/api` are from the official template at commit `60ec7b4306ab16dac83ea10ed9b81f5670b51ee3`. Overflight supplied the integration reference. | [Pinned Projectivy template](https://github.com/spocky/projectivy-plugin-wallpaper-provider/tree/60ec7b4306ab16dac83ea10ed9b81f5670b51ee3), [Apache-2.0 text](licenses/projectivy-api.txt) |
+| youtubedl-android 0.18.1 | Maven `library` and `common` identify their license as GPL-3.0. The library ships native Python and QuickJS for four Android ABIs and an older yt-dlp resource. | [Wrapper tag and source](https://github.com/yausername/youtubedl-android/tree/0.18.1), [GPL-3.0 text](licenses/youtubedl-android.txt) |
+| yt-dlp 2026.10.26 zipapp | Unlicense for the yt-dlp core. The separately fetched `yt-dlp` asset is checked against its pinned SHA-256 in the build. Inspection found `yt_dlp` and `yt_dlp_ejs` packages. The app uses this zipapp at runtime. The wrapper AAR still contains its older resource. | [Pinned release](https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.26), [Unlicense text](licenses/yt-dlp.txt) |
+| yt-dlp-ejs 0.8.0 and bundled 0.3.1 | EJS uses the Unlicense, with MIT-licensed astring and ISC-licensed Meriyah included in the solver bundle. The wrapper’s older resource identifies itself as yt-dlp 2025.11.12 with EJS 0.3.1. | [EJS 0.8.0](https://github.com/yt-dlp/ejs/tree/0.8.0), [EJS 0.3.1](https://github.com/yt-dlp/ejs/tree/0.3.1), [yt-dlp 2025.11.12](https://github.com/yt-dlp/yt-dlp/tree/2025.11.12), [retained upstream notices](licenses/upstream/) |
+| AndroidX, Media3 1.8.0, Kotlin 2.1.20 and JetBrains annotations | Resolved Maven projects declare Apache-2.0. | [Resolved runtime coordinates](licenses/maven-runtime.tsv), [extracted notice index](licenses/maven-notice-index.tsv) |
+| Guava 33.3.1-android, failureaccess 1.0.2, Commons IO 2.5, Commons Compress 1.12, and Jackson 2.11.1 | Apache-2.0 upstream. The resolved Guava `listenablefuture` artifact is its empty conflict-avoidance module. | [Guava source](https://github.com/google/guava/tree/v33.3.1), [Commons IO](https://commons.apache.org/proper/commons-io/), [Commons Compress](https://commons.apache.org/proper/commons-compress/), [Jackson](https://github.com/FasterXML/jackson), [retained Maven notices](licenses/maven-notices/) |
+| Gradle, Android Gradle Plugin, and Kotlin build plugins | Build tools. Gradle and Kotlin are Apache-2.0 upstream. The Android build tools are obtained through the SDK and Gradle plugin channels and used under their applicable terms. | [Gradle license](https://gradle.org/legal/licenses/), [Kotlin license](https://github.com/JetBrains/kotlin/blob/v2.1.20/license/LICENSE.txt) |
+| JUnit 4.13.2 and Hamcrest Core 1.3 | Test dependencies, excluded from the APK. JUnit uses EPL-1.0 and Hamcrest Core uses BSD-3-Clause. | [JUnit 4 source](https://github.com/junit-team/junit4/tree/r4.13.2), [Hamcrest license](https://hamcrest.org/JavaHamcrest/license) |
+
+The notice index maps the resolved Maven coordinates and archive entries to the retained copies. The Gradle build adds the `licenses/` directory to APK assets. The bundle selects the youtubedl-android core AAR and its dependencies. It includes neither the optional FFmpeg AAR nor the optional aria2c AAR.
+
+## Native extractor runtime
+
+[Native runtime inventory](licenses/native-runtime.tsv) records the native APK entries and SHA-256 digests. The four embedded Python archives contain CPython 3.12, OpenSSL, GNU Readline 8.3, GDBM, other shared libraries, and a Mozilla CA bundle. They also contain Mutagen 1.47.0 and PyCryptodomex 3.23.0. Mutagen identifies itself as GPL-2.0-or-later in the bundled code. PyCryptodomex carries the upstream PyCryptodome license and its incorporated notices. QuickJS’s upstream license is MIT. [CPython license](https://docs.python.org/3.12/license.html), [QuickJS](https://bellard.org/quickjs/), [Mutagen source](https://github.com/quodlibet/mutagen), [PyCryptodome license](https://github.com/Legrandin/pycryptodome/blob/v3.23.0/LICENSE.rst)
+
+The upstream notices and Maven project licenses establish the reviewed components’ license families. The per-ABI native artifacts still need an exact source and build mapping. In particular, the wrapper’s [Python build notes at 0.18.1](https://github.com/yausername/youtubedl-android/blob/0.18.1/BUILD_PYTHON.md) show a Python 3.7 example, while the inspected AAR contains Python 3.12. The native archive inventory does not establish the precise commits, patches, transitive license texts, and build scripts for QuickJS and every shared library, including Android support, `libcrypt`, libffi, ncurses, OpenSSL, Readline, GDBM, and the compression libraries. The provenance and attribution of the packaged CA bundle also need to be recorded. The checked-in notices do not close those gaps.
+
+## Before distributing an APK
+
+1. Match each native bundle and the wrapper’s older embedded yt-dlp resource to exact upstream versions, source, patches, build inputs, and notices. If the original prebuilds cannot be traced, build equivalent bundles from pinned sources and keep the existing on-device extractor interface.
+2. Rebuild and inspect the final APK and its notice bundle. Provide the Corresponding Source required for that exact GPL-covered binary under the applicable terms of GPLv3 section 6. [GPLv3 text](LICENSE)
+3. Run the tests, lint, and side-load the final signed artifact. Keep signing keys outside the repository. Release attachments are limited to the APK and related documentation. Make the matching source and build instructions available from the tagged repository and the locations referenced by the release.
+
+The GitHub Actions workflow verifies builds. It does not sign APKs or attach them to public releases.

@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">Video Wallpaper for Projectivy Launcher</string>
+    <string name="screen_title">Video wallpapers</string>
+    <string name="youtube_input">YouTube link or video ID</string>
+    <string name="download">Download</string>
+    <string name="content_notice_title">Before you download</string>
+    <string name="content_notice">This application allows you to use locally stored videos as wallpapers. Only download or use content when you have the necessary rights or permission. Some video platforms restrict downloading under their terms of service.</string>
+    <string name="acknowledge_notice">I understand</string>
+    <string name="add_file">Add MP4 file</string>
+    <string name="preview_label">Background preview</string>
+    <string name="history">Recent wallpapers</string>
+    <string name="history_empty">Your recent wallpapers will appear here</string>
+    <string name="ready_to_add">720p downloads · up to two minutes</string>
+    <string name="invalid_share">Share a YouTube link or video ID.</string>
+    <string name="starting_download">Finding a 720p source…</string>
+    <string name="opening_file">Opening the file…</string>
+    <string name="preparing_clip">Preparing the first two minutes…</string>
+    <string name="clip_progress">Copying video · %1$d%%</string>
+    <string name="active">Active</string>
+    <string name="active_title">Active · %1$s</string>
+    <string name="set_background">Set background</string>
+    <string name="delete">Delete</string>
+    <string name="wallpaper_actions">Wallpaper actions</string>
+    <string name="setting_background">Setting background…</string>
+    <string name="deleting_background">Deleting video…</string>
+    <string name="no_file_picker">No file picker is available on this device.</string>
+    <string name="could_not_prepare">Could not save the wallpaper. Try again.</string>
+    <string name="preview_unavailable">The wallpaper is saved. The preview could not play.</string>
+    <string name="provider_uuid" translatable="false">ec99775c-cabf-4238-afae-f6a624e1b64d</string>
+</resources>
