@@ -1,10 +1,15 @@
 Video Wallpaper for Projectivy Launcher
+Copyright (c) 2026 VideoWallpaperPL
+
+Original source and artwork use GPL-3.0-only. See project-gpl-3.0.txt.
+The matching project source and build instructions are available at
+https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases
 
 Includes the Projectivy wallpaper provider API from the official
 spocky/projectivy-plugin-wallpaper-provider template, commit
 60ec7b4306ab16dac83ea10ed9b81f5670b51ee3. The Kotlin and AIDL provider
 contract retain their Apache License 2.0 terms.
 
-Uses youtubedl-android, yt-dlp, and the dependencies identified in the
-repository's THIRD_PARTY_LICENSES.md. The maven-notice-index.tsv file
-maps retained notices to their origin in the inspected Maven artifacts.
+Includes yt-dlp, yt-dlp-ejs, QuickJS, and the Chaquopy Python runtime.
+See the retained licenses under upstream/ and THIRD_PARTY_LICENSES.md in
+the tagged source for exact versions, build inputs, and attribution.

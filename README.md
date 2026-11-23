@@ -33,17 +33,18 @@ The screenshots use original illustrative graphics created for this project.
 
 You need Android TV or Google TV running Android 7.0 or newer, plus Projectivy Launcher with Premium enabled for external wallpaper providers. [Projectivy plugin guide](https://projectivylauncher.com/plugins.html), [Projectivy’s Overflight listing](https://play.google.com/store/apps/details?id=tv.projectivy.plugin.wallpaperprovider.overflight)
 
-The current release provides source code. Build a debug APK locally and sideload it using the steps below. [GitHub Releases](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases)
+Download the signed APK from the release page, then sideload it with Android Debug Bridge. [GitHub Releases](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases/latest)
 
-1. Get the source, set up the [build prerequisites](#build-and-test), and run `./gradlew :app:assembleDebug` from the project directory.
-2. Install [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) on your computer.
-3. Enable debugging on the TV and connect using the options shown by the device. Approve the computer’s debugging prompt on the TV.
-4. Confirm that `adb devices` lists the TV, then install the APK. Use `-s <device-serial>` when more than one device is connected.
+1. Install [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) on your computer.
+2. Enable debugging on the TV and connect using the options shown by the device. Approve the computer’s debugging prompt on the TV.
+3. Confirm that `adb devices` lists the TV, then install the downloaded APK. Use `-s <device-serial>` when more than one device is connected.
 
 ```sh
 adb devices
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r video-wallpaper-v0.6.apk
 ```
+
+Android requires the same signing key for an in-place update. If you installed a debug build, back up any clips you want to keep before removing it to install the signed release. [Android app signing](https://developer.android.com/studio/publish/app-signing)
 
 Open **Video Wallpaper for Projectivy Launcher**, add a clip, then choose the provider in **Projectivy Settings → Appearance → Wallpaper → Launcher wallpaper**. Set the video wallpaper volume in Projectivy to hear the clip. [Projectivy release notes](https://github.com/spocky/miproja1/releases/tag/4.60)
 
@@ -55,13 +56,13 @@ See [Disclaimer](DISCLAIMER.md) for content rights, platform terms, and hosting 
 
 ## Build and test
 
-Use JDK 17, Android SDK Platform 35, and Build Tools 35.0.0. Configure the SDK through Android Studio, `ANDROID_HOME`, or a local `local.properties` file.
+Build on macOS or Linux with JDK 17, Python 3.11, Bash, Make, a host C compiler, Android SDK Platform 35, Build Tools 35.0.0, and Android NDK 30.0.16248370. Configure the SDK through Android Studio, `ANDROID_HOME`, or a local `local.properties` file. To use a standalone installation of that NDK, set `ANDROID_NDK_HOME` to its directory.
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-The tests cover YouTube link parsing and wallpaper history, including capacity, replacement, selection, and deletion. [GitHub Actions](.github/workflows/android.yml) runs the tests and lint and assembles an unsigned release APK. The Gradle distribution and yt-dlp zipapp have pinned checksums. Debug APK signatures depend on the build machine’s debug key.
+The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. The tests cover YouTube link parsing and wallpaper history, including capacity, replacement, selection, and deletion. [GitHub Actions](.github/workflows/android.yml) runs the tests and lint and assembles an unsigned release APK. The Gradle distribution, yt-dlp zipapp, and QuickJS source archive have pinned checksums.
 
 ## License
 

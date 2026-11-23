@@ -1,0 +1,7 @@
+coordinate	artifact	sha256
+com.chaquo.python:gradle:17.2.0	gradle-17.2.0.jar	c2a057a7aaa8946400f75f9d3c7400ec92b9833c7101605c47c25af02799ed16
+com.chaquo.python:target:3.11.17-0	target-3.11.17-0-arm64-v8a.zip	399b58d04898f2c7d5f0044e141bdf3818552e538e5f36d06d7fe0bebc298582
+com.chaquo.python:target:3.11.17-0	target-3.11.17-0-armeabi-v7a.zip	7516b90fcb8a5a2df70e5f9899aab7e63fa43efa0455c3ba7b846ae54d70ee2c
+com.chaquo.python:target:3.11.17-0	target-3.11.17-0-stdlib-pyc.zip	5b853d5631b8f482f4f181af3d7b8162c17f440da5eafc5e1f64b23faf53f773
+com.chaquo.python:target:3.11.17-0	target-3.11.17-0-x86.zip	03cc81afd7b7b8063249c871d62c1a26b1776aee3783e7c1cd914ed3b4c1d67c
+com.chaquo.python:target:3.11.17-0	target-3.11.17-0-x86_64.zip	a479a9c74ca9e900f30b6089ffd23a10d74fe7a9f427d967bceddf8f3fe206f1

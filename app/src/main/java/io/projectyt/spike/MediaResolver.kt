@@ -7,9 +7,10 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.AtomicFile
 import android.util.Log
-import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.youtubedl_android.YoutubeDLException
-import com.yausername.youtubedl_android.YoutubeDLRequest
+import com.chaquo.python.PyException
+import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -22,7 +23,6 @@ private const val AUDIO_FORMAT = "ba[ext=m4a][acodec^=mp4a][protocol=https]"
 
 internal object MediaResolver {
     private val headerNames = listOf("User-Agent", "Accept", "Accept-Language", "Referer", "Origin", "Sec-Fetch-Mode")
-    private var prepared = false
 
     @Synchronized
     fun download(context: Context, watchUrl: String, onProgress: (Int?) -> Unit): SavedWallpaper {
@@ -151,25 +151,32 @@ internal object MediaResolver {
     }
 
     private fun resolve(context: Context, watchUrl: String): JSONObject {
-        prepareRuntime(context)
-        val request = YoutubeDLRequest(watchUrl)
-            .addOption("--ignore-config")
-            .addOption("--no-playlist")
-            .addOption("--match-filter", "!is_live & !is_upcoming & availability~='^(public|unlisted)$'")
-            .addOption("--no-js-runtimes") // The Android wrapper adds its bundled QuickJS.
-            .addOption("--no-remote-components")
-            .addOption("--socket-timeout", 10)
-            .addOption("--retries", 0)
-            .addOption("--extractor-retries", 0)
-            .addOption("--format", "($DOWNLOAD_FORMAT[fps<=30]/$DOWNLOAD_FORMAT)+($AUDIO_FORMAT[acodec=mp4a.40.2]/$AUDIO_FORMAT)")
-            .addOption("--format-sort", "+fps,+filesize")
-            .addOption("--format-sort-force")
-            .addOption("--simulate")
-            .addOption("--print", "%(.{title,requested_formats,duration})j")
+        val archive = prepareRuntime(context)
+        val quickJs = File(context.applicationInfo.nativeLibraryDir, "libprojectyt-qjs.so")
+        val arguments = listOf(
+            "--ignore-config",
+            "--no-playlist",
+            "--match-filter", "!is_live & !is_upcoming & availability~='^(public|unlisted)$'",
+            "--no-js-runtimes", "--js-runtimes", "quickjs:${quickJs.absolutePath}",
+            "--no-remote-components",
+            "--socket-timeout", "10",
+            "--retries", "0",
+            "--extractor-retries", "0",
+            "--format", "($DOWNLOAD_FORMAT[fps<=30]/$DOWNLOAD_FORMAT)+($AUDIO_FORMAT[acodec=mp4a.40.2]/$AUDIO_FORMAT)",
+            "--format-sort", "+fps,+filesize",
+            "--format-sort-force",
+            "--simulate",
+            "--print", "%(.{title,requested_formats,duration})j",
+            "--", watchUrl,
+        )
         val response = try {
-            YoutubeDL.execute(request, processId = null, redirectErrorStream = false)
-        } catch (error: YoutubeDLException) {
-            val message = error.message.orEmpty()
+            val downloader = Python.getInstance().getModule("wallpaper_downloader")
+            JSONArray(downloader.callAttr("resolve", archive.absolutePath, JSONArray(arguments).toString()).toString())
+        } catch (_: PyException) {
+            throw IllegalArgumentException("Could not open this YouTube video.")
+        }
+        if (response.getInt(0) != 0) {
+            val message = response.getString(2)
             throw IllegalArgumentException(when {
                 message.contains("Requested format is not available", ignoreCase = true) ->
                     "This video needs a 720p H.264 stream and an AAC audio track."
@@ -183,24 +190,26 @@ internal object MediaResolver {
                 else -> "Could not open this YouTube video."
             })
         }
-        val json = response.out.lineSequence().map(String::trim).lastOrNull { it.startsWith("{") }
+        val json = response.getString(1).lineSequence().map(String::trim).lastOrNull { it.startsWith("{") }
         require(json != null) { "Choose a prerecorded YouTube video with compatible video and audio streams." }
         return JSONObject(json)
     }
 
-    private fun prepareRuntime(context: Context) {
-        if (prepared) return
-        YoutubeDL.init(context)
-        val directory = File(context.noBackupFilesDir, "${YoutubeDL.baseName}/${YoutubeDL.ytdlpDirName}")
-        val binary = AtomicFile(File(directory, YoutubeDL.ytdlpBin))
-        val output = binary.startWrite()
-        try {
-            context.assets.open("yt-dlp-${BuildConfig.YT_DLP_VERSION}").use { it.copyTo(output) }
-            binary.finishWrite(output)
-        } catch (error: Exception) {
-            binary.failWrite(output)
-            throw error
+    private fun prepareRuntime(context: Context): File {
+        val name = "yt-dlp-${BuildConfig.YT_DLP_VERSION}"
+        val archive = File(context.noBackupFilesDir, name)
+        if (!archive.isFile) {
+            val binary = AtomicFile(archive)
+            val output = binary.startWrite()
+            try {
+                context.assets.open(name).use { it.copyTo(output) }
+                binary.finishWrite(output)
+            } catch (error: Exception) {
+                binary.failWrite(output)
+                throw error
+            }
         }
-        prepared = true
+        if (!Python.isStarted()) Python.start(AndroidPlatform(context.applicationContext))
+        return archive
     }
 }
