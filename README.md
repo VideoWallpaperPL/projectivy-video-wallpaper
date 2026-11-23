@@ -6,6 +6,17 @@ Play videos from your Android TV’s local storage as wallpapers in Projectivy L
 
 > This is an independently developed, unofficial plugin for Projectivy Launcher. It is not affiliated with or endorsed by the Projectivy Launcher developers, Google, or YouTube.
 
+## Releases
+
+GitHub releases include the source code for each version. The latest release also includes a signed APK for Android TV and Google TV.
+
+- [Download the signed v0.6 APK](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases/download/v0.6/video-wallpaper-v0.6.apk)
+- [v0.6 SHA-256 checksum](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases/download/v0.6/SHA256SUMS.txt)
+- [Latest release notes](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases/latest)
+- [All releases](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases)
+
+Follow the [Android TV installation instructions](#install-on-android-tv) after downloading the APK.
+
 ## Screenshots
 
 ![Wallpaper library with a video preview and a grid of recent clips](docs/screenshots/library.png)
@@ -33,7 +44,7 @@ The screenshots use original illustrative graphics created for this project.
 
 You need Android TV or Google TV running Android 7.0 or newer, plus Projectivy Launcher with Premium enabled for external wallpaper providers. [Projectivy plugin guide](https://projectivylauncher.com/plugins.html), [Projectivy’s Overflight listing](https://play.google.com/store/apps/details?id=tv.projectivy.plugin.wallpaperprovider.overflight)
 
-Download the signed APK from the release page, then sideload it with Android Debug Bridge. [GitHub Releases](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases/latest)
+Download the signed APK from [Releases](#releases), then sideload it with Android Debug Bridge.
 
 1. Install [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) on your computer.
 2. Enable debugging on the TV and connect using the options shown by the device. Approve the computer’s debugging prompt on the TV.
