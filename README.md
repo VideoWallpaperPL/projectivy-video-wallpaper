@@ -10,8 +10,8 @@ Play videos from your Android TV’s local storage as wallpapers in Projectivy L
 
 GitHub releases include the source code for each version. The latest release also includes a signed APK for Android TV and Google TV.
 
-- [Download the signed v0.6 APK](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases/download/v0.6/video-wallpaper-v0.6.apk)
-- [v0.6 SHA-256 checksum](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases/download/v0.6/SHA256SUMS.txt)
+- [Download the signed v0.7 APK](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases/download/v0.7/video-wallpaper-v0.7.apk)
+- [v0.7 SHA-256 checksum](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases/download/v0.7/SHA256SUMS.txt)
 - [Latest release notes](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases/latest)
 - [All releases](https://github.com/VideoWallpaperPL/projectivy-video-wallpaper/releases)
 
@@ -34,7 +34,7 @@ Follow the [Android TV installation instructions](#install-on-android-tv) after 
 
 </details>
 
-Captured from the development build using original sample artwork.
+The screenshots use original sample artwork.
 
 ## Features
 
@@ -57,7 +57,7 @@ Download the signed APK from [Releases](#releases), then sideload it with Androi
 
 ```sh
 adb devices
-adb install -r video-wallpaper-v0.6.apk
+adb install -r video-wallpaper-v0.7.apk
 ```
 
 Android requires the same signing key for an in-place update. If you installed a debug build, back up any clips you want to keep before removing it to install the signed release. [Android app signing](https://developer.android.com/studio/publish/app-signing)

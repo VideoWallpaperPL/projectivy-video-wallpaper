@@ -110,8 +110,8 @@ android {
         applicationId = "io.projectyt.spike"
         minSdk = 24
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.6"
+        versionCode = 7
+        versionName = "0.7"
         buildConfigField("String", "YT_DLP_VERSION", "\"$ytDlpVersion\"")
         ndk { abiFilters += releaseAbis }
     }
