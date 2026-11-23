@@ -31,14 +31,14 @@ internal data class ClipSource(val uri: Uri, val headers: Map<String, String> = 
 internal object SourceClip {
     fun copy(
         context: Context, video: ClipSource, audio: ClipSource?, output: File,
-        durationUs: Long, onProgress: (Int?) -> Unit,
+        durationUs: Long, limitMs: Long, includeAudio: Boolean, onProgress: (Int?) -> Unit,
     ) {
-        val videoItem = EditedMediaItem.Builder(mediaItem(video.uri, durationUs))
-            .setRemoveAudio(audio != null)
+        val videoItem = EditedMediaItem.Builder(mediaItem(video.uri, durationUs, limitMs))
+            .setRemoveAudio(audio != null || !includeAudio)
             .build()
         val sequences = mutableListOf(EditedMediaItemSequence.Builder(listOf(videoItem)).build())
         if (audio != null) {
-            val audioItem = EditedMediaItem.Builder(mediaItem(audio.uri, durationUs)).setRemoveVideo(true).build()
+            val audioItem = EditedMediaItem.Builder(mediaItem(audio.uri, durationUs, limitMs)).setRemoveVideo(true).build()
             sequences.add(EditedMediaItemSequence.Builder(listOf(audioItem)).build())
         }
         val composition = Composition.Builder(sequences).setTransmuxAudio(true).setTransmuxVideo(true).build()
@@ -46,11 +46,11 @@ internal object SourceClip {
         export(context, composition, listOfNotNull(video, audio), output, audio != null, onProgress)
     }
 
-    private fun mediaItem(source: Uri, durationUs: Long) =
+    private fun mediaItem(source: Uri, durationUs: Long, limitMs: Long) =
         MediaItem.Builder().setUri(source).setMimeType(MimeTypes.VIDEO_MP4).apply {
-            if (durationUs <= 0 || durationUs > CLIP_DURATION_MS * 1000) {
+            if (durationUs <= 0 || durationUs > limitMs * 1000) {
                 setClippingConfiguration(
-                    MediaItem.ClippingConfiguration.Builder().setEndPositionMs(CLIP_DURATION_MS).build(),
+                    MediaItem.ClippingConfiguration.Builder().setEndPositionMs(limitMs).build(),
                 )
             }
         }.build()

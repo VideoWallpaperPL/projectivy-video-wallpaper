@@ -32,7 +32,9 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
+import android.widget.Space
 import android.widget.TextView
 import android.widget.VideoView
 import tv.projectivy.plugin.wallpaperprovider.api.WallpaperProviderContract
@@ -50,7 +52,11 @@ class SpikeActivity : Activity() {
     private lateinit var input: EditText
     private lateinit var download: Button
     private lateinit var addFile: Button
+    private lateinit var audioOption: Button
+    private lateinit var durationOption: Button
+    private lateinit var selectionButton: Button
     private lateinit var status: TextView
+    private lateinit var progress: ProgressBar
     private lateinit var preview: VideoView
     private lateinit var placeholder: TextView
     private lateinit var historyLabel: TextView
@@ -58,11 +64,16 @@ class SpikeActivity : Activity() {
     private var started = false
     private var working = false
     private var previewId: String? = null
+    private var options = DownloadOptions()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         selection = Selection(this)
         downloadNotice = DownloadNotice(this)
+        options = DownloadOptions(
+            savedInstanceState?.getInt("downloadMinutes", 2) ?: 2,
+            savedInstanceState?.getBoolean("downloadAudio", true) ?: true,
+        )
         input = EditText(this).apply {
             setHint(R.string.youtube_input)
             setSingleLine()
@@ -82,9 +93,23 @@ class SpikeActivity : Activity() {
         }
         download = button(R.string.download, primary = true, action = ::downloadLink)
         addFile = button(R.string.add_file, action = ::pickFile)
+        audioOption = button(R.string.audio_on) {
+            options = options.copy(includeAudio = !options.includeAudio)
+            updateOptions()
+        }
+        durationOption = button(R.string.clip_length, action = ::chooseDuration)
+        selectionButton = button(R.string.select_wallpapers, action = ::chooseWallpapers)
+        updateOptions()
         status = label("", 12f, MUTED).apply {
             maxLines = 2
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            indeterminateTintList = ColorStateList.valueOf(MINT)
+            progressTintList = ColorStateList.valueOf(MINT)
+            progressBackgroundTintList = ColorStateList.valueOf(BORDER)
+            visibility = View.GONE
         }
         historyLabel = label("", 20f, INK, bold = true).apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isAccessibilityHeading = true
@@ -99,7 +124,7 @@ class SpikeActivity : Activity() {
         super.onStart()
         started = true
         renderHistory()
-        if (!working) showPreview(selection.history().active)
+        if (!working) showPreview(selection.playback())
     }
 
     override fun onStop() {
@@ -112,6 +137,12 @@ class SpikeActivity : Activity() {
         worker.shutdownNow()
         thumbnailWorker.shutdownNow()
         super.onDestroy()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("downloadMinutes", options.minutes)
+        outState.putBoolean("downloadAudio", options.includeAudio)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -132,9 +163,13 @@ class SpikeActivity : Activity() {
             })
             addView(LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                addView(addFile, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)))
-                addView(status, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = dp(12) })
+                addView(audioOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)))
+                addView(durationOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
+                addView(Space(context), LinearLayout.LayoutParams(0, 1, 1f))
+                addView(addFile, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(8) })
+            addView(progress, LinearLayout.LayoutParams(MATCH_PARENT, dp(9)).apply { topMargin = dp(8) })
+            addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(5) })
         }
         val previewCard = FrameLayout(this).apply {
             background = surface(FIELD, 14, BORDER)
@@ -171,7 +206,11 @@ class SpikeActivity : Activity() {
             setPadding(dp(24), dp(16), dp(24), dp(24))
             addView(label(getString(R.string.screen_title), 29f, INK, bold = true))
             addView(top, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(12) })
-            addView(historyLabel, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(historyLabel, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(selectionButton, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
                 topMargin = dp(16)
                 bottomMargin = dp(9)
             })
@@ -187,7 +226,14 @@ class SpikeActivity : Activity() {
 
     private fun renderHistory(preferredFocus: String? = null) {
         val history = selection.history()
+        val selectedCount = history.selectedIds.size
         historyLabel.setText(if (history.entries.isEmpty()) R.string.history_empty else R.string.history)
+        selectionButton.isEnabled = !working && history.entries.size >= 2
+        selectionButton.text = if (selectedCount > 1) {
+            resources.getQuantityString(R.plurals.wallpapers_selected, selectedCount, selectedCount)
+        } else {
+            getString(R.string.select_wallpapers)
+        }
         grid.removeAllViews()
         thumbnailViews.clear()
         tiles.clear()
@@ -201,7 +247,7 @@ class SpikeActivity : Activity() {
                         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                     }
                 } else {
-                    tile(entry, entry.id == history.activeId)
+                    tile(entry, entry.id in history.selectedIds, selectedCount > 1)
                 }
                 strip.addView(card, LinearLayout.LayoutParams(0, dp(86), 1f).apply {
                     if (column > 0) marginStart = dp(10)
@@ -215,14 +261,18 @@ class SpikeActivity : Activity() {
         if (history.entries.isEmpty() && !working && status.text.isEmpty()) status.setText(R.string.ready_to_add)
     }
 
-    private fun tile(entry: SavedWallpaper, active: Boolean): View {
+    private fun tile(entry: SavedWallpaper, selected: Boolean, multiple: Boolean): View {
         val card = FrameLayout(this).apply {
             isFocusable = true
             isClickable = true
             background = surface(SLOT, 12, BORDER)
             clipToOutline = true
             foreground = stateDrawable(surface(Color.TRANSPARENT, 12, MINT, 3), surface(Color.TRANSPARENT, 12))
-            contentDescription = if (active) getString(R.string.active_title, entry.title) else entry.title
+            contentDescription = when {
+                selected && multiple -> getString(R.string.selected_title, entry.title)
+                selected -> getString(R.string.active_title, entry.title)
+                else -> entry.title
+            }
             setOnClickListener { if (!working) openActions(entry) }
         }
         val image = ImageView(this).apply {
@@ -238,8 +288,8 @@ class SpikeActivity : Activity() {
             background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xF0000910.toInt(), Color.TRANSPARENT))
         }
         card.addView(caption, FrameLayout.LayoutParams(MATCH_PARENT, dp(36), Gravity.BOTTOM))
-        if (active) {
-            val badge = label(getString(R.string.active), 10f, DARK_INK, bold = true).apply {
+        if (selected) {
+            val badge = label(getString(if (multiple) R.string.selected else R.string.active), 10f, DARK_INK, bold = true).apply {
                 setPadding(dp(7), dp(3), dp(7), dp(3))
                 background = surface(MINT, 6)
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -307,8 +357,9 @@ class SpikeActivity : Activity() {
         }
         val delete = button(R.string.delete, destructive = true) {
             dialog.dismiss()
-            submit(R.string.deleting_background, entry.id) {
+            submit(R.string.deleting_background, entry.id, successMessage = R.string.deleted_from_library) {
                 selection.delete(entry.id)
+                thumbnails.remove(entry.id)
                 selection.history().active
             }
         }
@@ -327,6 +378,9 @@ class SpikeActivity : Activity() {
                 }, LinearLayout.LayoutParams(MATCH_PARENT, dp(82)).apply { bottomMargin = dp(10) })
             }
             addView(heading)
+            entry.options?.let {
+                addView(label(getString(R.string.clip_option_summary, it.minutes, audioLabel(it)), 12f, MUTED))
+            }
             addView(LinearLayout(context).apply {
                 addView(set, LinearLayout.LayoutParams(0, dp(42), 2f))
                 addView(delete, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(8) })
@@ -343,6 +397,81 @@ class SpikeActivity : Activity() {
         dialog.show()
         dialog.window?.setLayout(dp(310).coerceAtMost(resources.displayMetrics.widthPixels - dp(32)), WRAP_CONTENT)
         set.requestFocus()
+    }
+
+    private fun audioLabel(value: DownloadOptions) = getString(if (value.includeAudio) R.string.audio_on else R.string.audio_off)
+
+    private fun updateOptions() {
+        audioOption.text = audioLabel(options)
+        durationOption.text = getString(R.string.clip_length_value, options.minutes)
+        durationOption.contentDescription = getString(R.string.clip_length_description, options.minutes)
+    }
+
+    private fun chooseDuration() {
+        val minutes = (1..5).toList()
+        val labels = minutes.map { resources.getQuantityString(R.plurals.minutes, it, it) }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.clip_length)
+            .setSingleChoiceItems(labels.toTypedArray(), options.minutes - 1) { dialog, which ->
+                options = options.copy(minutes = minutes[which])
+                updateOptions()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun chooseWallpapers() {
+        val history = selection.history()
+        if (working || history.entries.size < 2) return
+        val selected = history.selectedIds.toMutableSet()
+        val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), 0)
+            addView(label(getString(R.string.selection_instructions), 13f, MUTED))
+            addView(ScrollView(context).apply { addView(rows) }, LinearLayout.LayoutParams(
+                MATCH_PARENT, dp(minOf(history.entries.size * 49, 285)),
+            ))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.select_wallpapers)
+            .setView(panel)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.apply_wallpapers) { _, _ ->
+                val requested = selected.toSet()
+                if (requested == history.selectedIds) return@setPositiveButton
+                submit(R.string.setting_background) { selection.select(requested) }
+            }
+            .create()
+        fun updateRows() {
+            history.entries.forEachIndexed { index, entry ->
+                val checked = entry.id in selected
+                (rows.getChildAt(index) as Button).apply {
+                    val title = entry.options?.let {
+                        getString(R.string.selection_download_item, entry.title, it.minutes, audioLabel(it))
+                    } ?: entry.title
+                    text = if (checked) getString(R.string.checked_wallpaper, title) else title
+                    contentDescription = if (checked) getString(R.string.selected_title, title) else title
+                    setTextColor(if (checked) MINT else INK)
+                }
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = selected.isNotEmpty()
+        }
+        history.entries.forEach { entry ->
+            rows.addView(button(R.string.select_wallpapers) {
+                if (!selected.remove(entry.id)) selected.add(entry.id)
+                updateRows()
+            }.apply {
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                setSingleLine()
+                ellipsize = TextUtils.TruncateAt.END
+            }, LinearLayout.LayoutParams(MATCH_PARENT, dp(45)).apply { topMargin = dp(4) })
+        }
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(surface(PANEL, 16, BORDER))
+        updateRows()
+        rows.getChildAt(0).requestFocus()
     }
 
     private fun acceptSharedInput(intent: Intent) {
@@ -367,8 +496,9 @@ class SpikeActivity : Activity() {
             return
         }
         getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(input.windowToken, 0)
+        val requested = options
         if (downloadNotice.acknowledged()) {
-            startDownload(submitted, url)
+            startDownload(submitted, url, requested)
         } else {
             AlertDialog.Builder(this)
                 .setTitle(R.string.content_notice_title)
@@ -376,15 +506,15 @@ class SpikeActivity : Activity() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton(R.string.acknowledge_notice) { _, _ ->
                     downloadNotice.acknowledge()
-                    startDownload(submitted, url)
+                    startDownload(submitted, url, requested)
                 }
                 .show()
         }
     }
 
-    private fun startDownload(submitted: String, url: String) {
+    private fun startDownload(submitted: String, url: String, requested: DownloadOptions) {
         submit(R.string.starting_download, clearInput = submitted) {
-            MediaResolver.download(applicationContext, url, ::reportProgress)
+            MediaResolver.download(applicationContext, url, requested) { reportProgress(it) }
         }
     }
 
@@ -413,26 +543,47 @@ class SpikeActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != PICK_VIDEO || resultCode != RESULT_OK || working) return
         val uri = data?.data ?: return
-        submit(R.string.opening_file) { MediaResolver.import(applicationContext, uri, ::reportProgress) }
+        submit(R.string.opening_file) { MediaResolver.import(applicationContext, uri) { reportProgress(it) } }
     }
 
-    private fun reportProgress(percent: Int?) {
+    private fun reportProgress(update: ClipProgress) {
         runOnUiThread {
             if (isDestroyed || !working) return@runOnUiThread
-            status.text = if (percent == null) getString(R.string.preparing_clip)
-            else getString(R.string.clip_progress, percent)
+            when (update) {
+                is ClipProgress.Copying -> {
+                    val percent = update.percent
+                    progress.isIndeterminate = percent == null
+                    if (percent != null) progress.progress = percent
+                    status.text = if (percent == null) {
+                        getString(R.string.preparing_clip)
+                    } else {
+                        getString(R.string.clip_progress, percent)
+                    }
+                }
+                ClipProgress.Saving -> {
+                    progress.isIndeterminate = true
+                    status.setText(R.string.saving_clip)
+                }
+            }
         }
     }
 
     private fun submit(
-        message: Int, focusId: String? = null, clearInput: String? = null, action: () -> SavedWallpaper?,
+        message: Int, focusId: String? = null, clearInput: String? = null, successMessage: Int? = null,
+        action: () -> SavedWallpaper?,
     ) {
         if (working) return
         working = true
+        val previousPlayback = selection.playback()?.id
         download.isEnabled = false
         addFile.isEnabled = false
+        audioOption.isEnabled = false
+        durationOption.isEnabled = false
+        selectionButton.isEnabled = false
         showPreview(null)
         status.setText(message)
+        progress.isIndeterminate = true
+        progress.visibility = View.VISIBLE
         worker.execute {
             val result = runCatching(action)
             runOnUiThread {
@@ -440,28 +591,42 @@ class SpikeActivity : Activity() {
                 working = false
                 download.isEnabled = true
                 addFile.isEnabled = true
+                audioOption.isEnabled = true
+                durationOption.isEnabled = true
+                progress.visibility = View.GONE
+                val playback = selection.playback()
                 result.onSuccess { entry ->
                     if (clearInput != null && input.text.toString() == clearInput) input.text.clear()
-                    status.text = entry?.let { getString(R.string.active_title, it.title) } ?: getString(R.string.ready_to_add)
+                    val count = selection.history().selectedIds.size
+                    status.text = successMessage?.let(::getString)
+                        ?: playback?.let {
+                            getString(if (count > 1) R.string.preview_title else R.string.active_title, it.title)
+                        }
+                        ?: getString(R.string.ready_to_add)
                     renderHistory(entry?.id ?: focusId)
                     requestWallpaperUpdate()
                 }.onFailure { error ->
                     status.text = if (error is IllegalArgumentException || error is IllegalStateException) error.message
                     else getString(R.string.could_not_prepare)
+                    renderHistory(focusId)
+                    if (previousPlayback != playback?.id) requestWallpaperUpdate()
                 }
-                if (started) showPreview(selection.history().active)
+                if (started) showPreview(playback)
             }
         }
     }
 
-    private fun showPreview(entry: SavedWallpaper?) {
+    private fun showPreview(entry: WallpaperPlayback?) {
         if (entry?.id == previewId) return
         previewId = entry?.id
         preview.stopPlayback()
         placeholder.visibility = if (entry == null) View.VISIBLE else View.INVISIBLE
-        preview.visibility = if (entry == null) View.INVISIBLE else View.VISIBLE
-        if (entry != null) {
-            preview.setVideoURI(selection.uri(entry))
+        if (entry == null) {
+            preview.visibility = View.INVISIBLE
+        } else {
+            // Showing the surface can open the last URI immediately.
+            preview.setVideoURI(entry.uri)
+            preview.visibility = View.VISIBLE
             preview.start()
         }
     }

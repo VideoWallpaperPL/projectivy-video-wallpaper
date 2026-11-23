@@ -19,25 +19,30 @@ Follow the [Android TV installation instructions](#install-on-android-tv) after 
 
 ## Screenshots
 
-![Wallpaper library with a video preview and a grid of recent clips](docs/screenshots/library.png)
+![Wallpaper library with audio and clip length controls, a preview, and three selected videos](docs/screenshots/library.png)
+
+![Select wallpapers dialog with three videos checked for Projectivy to rotate through](docs/screenshots/selection.png)
 
 <details>
-<summary>Wallpaper actions and first-use notice</summary>
+<summary>Wallpaper actions, download notice, and progress</summary>
 
 ![Selected wallpaper with Set background and Delete actions](docs/screenshots/actions.png)
 
 ![First-use content rights notice before a download](docs/screenshots/download-notice.png)
 
+![Animated progress bar during the search for a compatible 720p source](docs/screenshots/download-progress.png)
+
 </details>
 
-The screenshots use original illustrative graphics created for this project.
+Captured from the development build using original sample artwork.
 
 ## Features
 
 - **Local import.** Add a 720p or 1080p H.264 MP4. The app keeps its audio when present.
-- **On-device downloads.** Paste or share a YouTube link or video ID, then choose **Download** and acknowledge the first-use notice. The app copies compatible 720p H.264 video and AAC audio into an MP4 without re-encoding either track. It prefers 30 fps when available.
-- **Short wallpaper clips.** Preparation keeps the first two minutes, up to 64 MiB. The finished clip becomes active and starts previewing.
-- **Wallpaper library.** Browse the 12 newest clips with your TV remote. Select a thumbnail to set it as the background or delete it.
+- **On-device downloads.** Paste or share a YouTube link or video ID. Pick a clip length from one to five minutes and turn audio on or off before choosing **Download**. The app copies compatible 720p H.264 video and optional AAC audio into an MP4 without re-encoding either track. It prefers 30 fps when available.
+- **Download progress.** Follow source lookup, copying, and saving. The app selects and previews each finished clip. If multiple wallpapers are selected, the new clip joins them. YouTube clips have a size limit of 32 MiB per selected minute. Local MP4 imports keep the two-minute limit.
+- **Wallpaper library.** Browse the 12 newest clips with your TV remote. Select a thumbnail to set it as the background or delete the app’s saved copy.
+- **Multiple wallpapers.** Open **Select wallpapers**, check the clips you want, and choose **Apply selection**. Projectivy receives the individual videos and controls when it switches between them.
 - **Local storage.** Clips and the library stay on the device. YouTube requests go from the TV to YouTube and its media hosts. The app uses no developer backend, analytics, or account credentials.
 
 ## Install on Android TV

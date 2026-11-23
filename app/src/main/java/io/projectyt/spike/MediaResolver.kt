@@ -14,35 +14,39 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-internal const val CLIP_DURATION_MS = 120_000L
-private const val MAX_DURATION_US = CLIP_DURATION_MS * 1000 + 100_000
-private const val MAX_OUTPUT_BYTES = 64L * 1024 * 1024
 private const val DOWNLOAD_HEIGHT = 720
 private const val DOWNLOAD_FORMAT = "bv[ext=mp4][vcodec^=avc1][height=$DOWNLOAD_HEIGHT][protocol=https]"
 private const val AUDIO_FORMAT = "ba[ext=m4a][acodec^=mp4a][protocol=https]"
 
 internal object MediaResolver {
     private val headerNames = listOf("User-Agent", "Accept", "Accept-Language", "Referer", "Origin", "Sec-Fetch-Mode")
+    private val importLimits = DownloadOptions()
 
     @Synchronized
-    fun download(context: Context, watchUrl: String, onProgress: (Int?) -> Unit): SavedWallpaper {
+    fun download(
+        context: Context, watchUrl: String, options: DownloadOptions, onProgress: (ClipProgress) -> Unit,
+    ): SavedWallpaper {
         check(DownloadNotice(context).acknowledged()) { "Acknowledge the content-use notice before downloading." }
         val library = Selection(context)
-        val existing = library.history().entries.firstOrNull { it.watchUrl == watchUrl }
+        val existing = library.history().entries.firstOrNull { it.watchUrl == watchUrl && it.options == options }
         if (existing != null) {
             val file = library.file(existing)
             val details = runCatching { inspect(context, Uri.fromFile(file)) }.getOrNull()
-            if (details?.height == DOWNLOAD_HEIGHT && details.hasAudio && details.canCopy(file.length())) {
-                return library.activate(existing.id)
+            if (details?.height == DOWNLOAD_HEIGHT && details.hasAudio == options.includeAudio &&
+                details.canCopy(file.length(), options.durationMs, options.maxBytes)
+            ) {
+                return library.activate(existing.id, keepOthers = true)
             }
         }
-        val resolved = resolve(context, watchUrl)
-        val formats = resolved.getJSONArray("requested_formats")
-        require(formats.length() == 2) { "YouTube did not provide both tracks." }
+        val resolved = resolve(context, watchUrl, options)
+        val formats = resolved.optJSONArray("requested_formats")
+        require(!options.includeAudio || formats?.length() == 2) { "YouTube did not provide both tracks." }
         val durationUs = (resolved.optDouble("duration", 0.0) * 1_000_000).toLong()
         return saveClip(
-            context, clipSource(formats.getJSONObject(0)), resolved.optString("title", "YouTube video"),
-            watchUrl, durationUs, onProgress, audio = clipSource(formats.getJSONObject(1)), requireAudio = true,
+            context, clipSource(formats?.getJSONObject(0) ?: resolved), resolved.optString("title", "YouTube video"),
+            watchUrl, durationUs, options, onProgress,
+            audio = formats?.optJSONObject(1)?.takeIf { options.includeAudio }?.let(::clipSource),
+            includeAudio = options.includeAudio,
         )
     }
 
@@ -59,21 +63,23 @@ internal object MediaResolver {
     }
 
     @Synchronized
-    fun import(context: Context, uri: Uri, onProgress: (Int?) -> Unit): SavedWallpaper {
+    fun import(context: Context, uri: Uri, onProgress: (ClipProgress) -> Unit): SavedWallpaper {
         val details = inspect(context, uri)
         val title = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
             ?.removeSuffix(".mp4")?.takeIf(String::isNotBlank) ?: "Imported video"
         val length = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
         return saveClip(
-            context, ClipSource(uri), title, null, details.durationUs, onProgress,
-            copyOnly = details.canCopy(length), requireAudio = details.hasAudio,
+            context, ClipSource(uri), title, null, details.durationUs, importLimits, onProgress,
+            copyOnly = details.canCopy(length, importLimits.durationMs, importLimits.maxBytes),
+            includeAudio = details.hasAudio,
         )
     }
 
     private fun saveClip(
         context: Context, video: ClipSource, title: String, watchUrl: String?, durationUs: Long,
-        onProgress: (Int?) -> Unit, requireAudio: Boolean, audio: ClipSource? = null, copyOnly: Boolean = false,
+        limits: DownloadOptions, onProgress: (ClipProgress) -> Unit,
+        includeAudio: Boolean, audio: ClipSource? = null, copyOnly: Boolean = false,
     ): SavedWallpaper {
         val output = File(context.cacheDir, "wallpaper-pending.mp4")
         output.delete()
@@ -84,7 +90,7 @@ internal object MediaResolver {
                 input.use { from ->
                     output.outputStream().use { to ->
                         val buffer = ByteArray(64 * 1024)
-                        var remaining = MAX_OUTPUT_BYTES
+                        var remaining = limits.maxBytes
                         while (true) {
                             if (Thread.currentThread().isInterrupted) throw InterruptedException()
                             val read = from.read(buffer)
@@ -97,7 +103,9 @@ internal object MediaResolver {
                 }
             } else {
                 try {
-                    SourceClip.copy(context, video, audio, output, durationUs, onProgress)
+                    SourceClip.copy(context, video, audio, output, durationUs, limits.durationMs, includeAudio) {
+                        onProgress(ClipProgress.Copying(it))
+                    }
                 } catch (error: InterruptedException) {
                     throw error
                 } catch (error: IllegalArgumentException) {
@@ -109,13 +117,16 @@ internal object MediaResolver {
                 }
             }
             val result = inspect(context, Uri.fromFile(output))
-            require(!result.hasOtherTracks && result.durationUs in 1..MAX_DURATION_US &&
+            require(!result.hasOtherTracks && result.durationUs in 1..(limits.durationMs * 1000 + 100_000) &&
                 (watchUrl == null || result.height == DOWNLOAD_HEIGHT)
-            ) { "The saved video did not meet the two-minute format limit." }
-            require(!requireAudio || result.hasAudio) { "The requested audio track was missing from the saved clip." }
-            require(output.length() in 1..MAX_OUTPUT_BYTES) { "The two-minute clip exceeded the 64 MiB limit." }
+            ) { "The saved video did not meet the ${limits.minutes}-minute format limit." }
+            require(result.hasAudio == includeAudio) { "The saved clip did not match the requested audio setting." }
+            require(output.length() in 1..limits.maxBytes) {
+                "The clip exceeded the ${limits.maxBytes / (1024 * 1024)} MiB limit."
+            }
             if (Thread.currentThread().isInterrupted) throw InterruptedException()
-            return Selection(context).add(output, title, watchUrl)
+            onProgress(ClipProgress.Saving)
+            return Selection(context).add(output, title, watchUrl, limits.takeIf { watchUrl != null })
         } finally {
             output.delete()
         }
@@ -124,8 +135,8 @@ internal object MediaResolver {
     private data class ClipDetails(
         val height: Int, val durationUs: Long, val hasAudio: Boolean, val hasOtherTracks: Boolean,
     ) {
-        fun canCopy(bytes: Long) =
-            !hasOtherTracks && durationUs in 1..MAX_DURATION_US && bytes in 1..MAX_OUTPUT_BYTES
+        fun canCopy(bytes: Long, limitMs: Long, maxBytes: Long) =
+            !hasOtherTracks && durationUs in 1..(limitMs * 1000 + 100_000) && bytes in 1..maxBytes
     }
 
     private fun inspect(context: Context, uri: Uri): ClipDetails {
@@ -150,9 +161,11 @@ internal object MediaResolver {
         }
     }
 
-    private fun resolve(context: Context, watchUrl: String): JSONObject {
+    private fun resolve(context: Context, watchUrl: String, options: DownloadOptions): JSONObject {
         val archive = prepareRuntime(context)
         val quickJs = File(context.applicationInfo.nativeLibraryDir, "libprojectyt-qjs.so")
+        val video = "($DOWNLOAD_FORMAT[fps<=30]/$DOWNLOAD_FORMAT)"
+        val format = if (options.includeAudio) "$video+($AUDIO_FORMAT[acodec=mp4a.40.2]/$AUDIO_FORMAT)" else video
         val arguments = listOf(
             "--ignore-config",
             "--no-playlist",
@@ -162,11 +175,11 @@ internal object MediaResolver {
             "--socket-timeout", "10",
             "--retries", "0",
             "--extractor-retries", "0",
-            "--format", "($DOWNLOAD_FORMAT[fps<=30]/$DOWNLOAD_FORMAT)+($AUDIO_FORMAT[acodec=mp4a.40.2]/$AUDIO_FORMAT)",
+            "--format", format,
             "--format-sort", "+fps,+filesize",
             "--format-sort-force",
             "--simulate",
-            "--print", "%(.{title,requested_formats,duration})j",
+            "--print", "%(.{title,requested_formats,duration,url,http_headers})j",
             "--", watchUrl,
         )
         val response = try {
@@ -179,7 +192,8 @@ internal object MediaResolver {
             val message = response.getString(2)
             throw IllegalArgumentException(when {
                 message.contains("Requested format is not available", ignoreCase = true) ->
-                    "This video needs a 720p H.264 stream and an AAC audio track."
+                    if (options.includeAudio) "This video needs a 720p H.264 stream and an AAC audio track."
+                    else "This video needs a 720p H.264 stream."
                 message.contains("Sign in", ignoreCase = true) ||
                     message.contains("Private video", ignoreCase = true) ||
                     message.contains("members-only", ignoreCase = true) ||

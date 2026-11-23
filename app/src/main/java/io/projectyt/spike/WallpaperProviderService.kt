@@ -4,7 +4,6 @@ import android.app.Service
 import android.content.Intent
 import android.os.Binder
 import android.os.Process
-import android.util.Log
 import tv.projectivy.plugin.wallpaperprovider.api.Event
 import tv.projectivy.plugin.wallpaperprovider.api.IWallpaperProviderService
 import tv.projectivy.plugin.wallpaperprovider.api.Wallpaper
@@ -24,19 +23,20 @@ class WallpaperProviderService : Service() {
             ) {
                 return emptyList()
             }
-            val selection = Selection(this@WallpaperProviderService)
-            val entry = selection.history().active ?: return emptyList()
-            val uri = selection.uri(entry)
+            val selected = Selection(this@WallpaperProviderService).selectedWallpapers()
             if (uid != Process.myUid()) {
                 val identity = Binder.clearCallingIdentity()
                 try {
-                    grantUriPermission(PROJECTIVY_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    selected.forEach {
+                        grantUriPermission(PROJECTIVY_PACKAGE, it.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
                 } finally {
                     Binder.restoreCallingIdentity(identity)
                 }
             }
-            Log.i("ProjectYT", "getWallpapers: one VIDEO")
-            return listOf(Wallpaper(uri.toString(), WallpaperType.VIDEO, WallpaperDisplayMode.DEFAULT, entry.title, entry.watchUrl))
+            return selected.map {
+                Wallpaper(it.uri.toString(), WallpaperType.VIDEO, WallpaperDisplayMode.DEFAULT, it.title, it.watchUrl)
+            }
         }
 
         override fun getPreferences() = "{}"

@@ -48,4 +48,56 @@ class WallpaperHistoryTest {
         assertEquals(newer, history.delete(older.id).active)
         assertEquals(history, history.delete("missing"))
     }
+
+    @Test
+    fun differentDownloadOptionsKeepSeparateClipsForTheSameLink() {
+        val newVersion = older.copy(id = "silent", options = DownloadOptions(5, false))
+        assertEquals(listOf(newVersion, newer, older), history.add(newVersion).entries)
+    }
+
+    @Test
+    fun selectionSavesMembershipIndependentlyOfTheOrderYouClick() {
+        assertEquals(
+            history.select(setOf(older.id, newer.id)),
+            history.select(setOf(newer.id, older.id)),
+        )
+        val selected = history.select(setOf(older.id, newer.id))
+        assertEquals(setOf(older, newer), selected.selected.toSet())
+        assertEquals(newer, selected.active)
+        assertThrows(IllegalArgumentException::class.java) { history.select(emptySet()) }
+        assertThrows(IllegalArgumentException::class.java) { history.select(setOf(older.id, "missing")) }
+    }
+
+    @Test
+    fun choosingOneWallpaperOrDeletingASelectionMaintainsAValidPreview() {
+        val selected = history.select(setOf(newer.id, older.id))
+        assertEquals(listOf(older), selected.activate(older.id).selected)
+        assertEquals(listOf(older), selected.delete(newer.id).selected)
+        assertEquals(older, selected.delete(newer.id).active)
+        assertEquals(selected, selected.delete("missing"))
+    }
+
+    @Test
+    fun newAndCachedDownloadsJoinAnExistingMultiSelection() {
+        val selected = history.select(setOf(newer.id, older.id))
+        val latest = SavedWallpaper("latest", "Latest", null)
+        val updated = selected.add(latest)
+        assertEquals(setOf(latest, newer, older), updated.selected.toSet())
+        assertEquals(latest, updated.active)
+        val cached = updated.activate(older.id, keepOthers = true)
+        assertEquals(updated.selectedIds, cached.selectedIds)
+        assertEquals(older, cached.active)
+    }
+
+    @Test
+    fun replacingOrEvictingAVideoPrunesItsSelection() {
+        val entries = history.entries + (3..12).map { SavedWallpaper("entry-$it", "Entry $it", null) }
+        val last = entries.last()
+        val source = WallpaperHistory(entries, newer.id).select(setOf(older.id, newer.id, last.id))
+        val replacement = older.copy(id = "replacement")
+        val updated = source.add(replacement)
+        assertEquals(setOf(newer, last, replacement), updated.selected.toSet())
+        val latest = SavedWallpaper("latest", "Latest", null)
+        assertEquals(setOf(newer, replacement, latest), updated.add(latest).selected.toSet())
+    }
 }
