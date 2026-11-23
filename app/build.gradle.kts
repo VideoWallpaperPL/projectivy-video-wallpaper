@@ -104,7 +104,7 @@ android {
     namespace = "io.projectyt.spike"
     compileSdk = 35
     ndkVersion = "30.0.16248370"
-    ndkPath = providers.environmentVariable("ANDROID_NDK_HOME").orNull
+    ndkPath = providers.environmentVariable("PROJECTIVY_ANDROID_NDK").orNull
 
     defaultConfig {
         applicationId = "io.projectyt.spike"

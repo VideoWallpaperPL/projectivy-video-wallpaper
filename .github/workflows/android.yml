@@ -35,4 +35,4 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;35.0.0" "ndk;30.0.16248370"
 
       - name: Run tests, lint, and assemble the APK
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleRelease
+        run: env -u ANDROID_NDK_HOME ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleRelease

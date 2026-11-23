@@ -56,7 +56,7 @@ See [Disclaimer](DISCLAIMER.md) for content rights, platform terms, and hosting 
 
 ## Build and test
 
-Build on macOS or Linux with JDK 17, Python 3.11, Bash, Make, a host C compiler, Android SDK Platform 35, Build Tools 35.0.0, and Android NDK 30.0.16248370. Configure the SDK through Android Studio, `ANDROID_HOME`, or a local `local.properties` file. To use a standalone installation of that NDK, set `ANDROID_NDK_HOME` to its directory.
+Build on macOS or Linux with JDK 17, Python 3.11, Bash, Make, a host C compiler, Android SDK Platform 35, Build Tools 35.0.0, and Android NDK 30.0.16248370. Configure the SDK through Android Studio, `ANDROID_HOME`, or a local `local.properties` file. To use a standalone installation of that NDK, set `PROJECTIVY_ANDROID_NDK` to its directory.
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
