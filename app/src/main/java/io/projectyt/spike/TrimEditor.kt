@@ -82,7 +82,7 @@ internal class TrimEditor(
                 showingRemoteHint = false
                 info.setText(R.string.trim_editor_hint)
             }
-        }
+        }.apply { id = View.generateViewId() }
     }
     private var player: ExoPlayer? = null
     private var job: Future<*>? = null
@@ -144,6 +144,11 @@ internal class TrimEditor(
         }
         bindTimestamp(start, true)
         bindTimestamp(end, false)
+        listOf(jumpStart, play, jumpEnd).forEach { it.nextFocusDownId = timeline.id }
+        timeline.nextFocusUpId = play.id
+        timeline.nextFocusDownId = start.id
+        start.nextFocusUpId = timeline.id
+        end.nextFocusUpId = timeline.id
         play.requestFocus()
         startPlayer()
     }
@@ -381,6 +386,7 @@ internal class TrimEditor(
     }
 
     private fun transport(symbol: String, description: Int, clicked: () -> Unit) = Button(activity).apply {
+        id = View.generateViewId()
         text = symbol
         contentDescription = activity.getString(description)
         setTextColor(INK)
