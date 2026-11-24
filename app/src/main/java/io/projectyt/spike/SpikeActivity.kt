@@ -16,8 +16,10 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.Editable
 import android.text.InputType
 import android.text.TextUtils
+import android.text.TextWatcher
 import android.util.LruCache
 import android.view.Gravity
 import android.view.View
@@ -54,6 +56,8 @@ class SpikeActivity : Activity() {
     private lateinit var cancelWork: Button
     private lateinit var audioOption: Button
     private lateinit var resolutionOption: Button
+    private lateinit var modeOption: Button
+    private lateinit var durationOption: Button
     private lateinit var selectionButton: Button
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
@@ -63,16 +67,23 @@ class SpikeActivity : Activity() {
     private lateinit var grid: LinearLayout
     private var started = false
     private var working = false
+    private var advanced = false
+    private var attachedEditorPending = false
     private var previewId: String? = null
     private var options = DownloadOptions()
     private var operation: Operation? = null
     private var trimEditor: TrimEditor? = null
+    private val openAttachedEditor = Runnable {
+        if (attachedEditorPending && started && !working && trimEditor == null) openCurrentLink()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         selection = Selection(this)
         downloadNotice = DownloadNotice(this)
+        advanced = savedInstanceState?.getBoolean("advancedMode") ?: false
         options = DownloadOptions(
+            minutes = savedInstanceState?.getInt("simpleMinutes", 2) ?: 2,
             includeAudio = savedInstanceState?.getBoolean("downloadAudio", true) ?: true,
             height = savedInstanceState?.getInt("downloadHeight", DEFAULT_HEIGHT) ?: DEFAULT_HEIGHT,
         )
@@ -88,12 +99,17 @@ class SpikeActivity : Activity() {
             setPadding(dp(12), 0, dp(12), 0)
             setOnEditorActionListener { _, action, _ ->
                 if (action != EditorInfo.IME_ACTION_GO) false else {
-                    editClip()
+                    openCurrentLink()
                     true
                 }
             }
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(text: Editable?) = scheduleAttachedEditor()
+            })
         }
-        download = button(R.string.choose_clip, primary = true, action = ::editClip)
+        download = button(R.string.download, primary = true, action = ::openCurrentLink)
         more = button(R.string.more, action = ::openMore)
         cancelWork = button(android.R.string.cancel, action = ::cancelOperation).apply { visibility = View.GONE }
         audioOption = button(R.string.audio_on) {
@@ -101,6 +117,13 @@ class SpikeActivity : Activity() {
             updateOptions()
         }
         resolutionOption = button(R.string.resolution, action = ::chooseResolution)
+        modeOption = button(R.string.simple_mode) {
+            advanced = !advanced
+            updateOptions()
+            status.setText(readyHint())
+            scheduleAttachedEditor()
+        }
+        durationOption = button(R.string.clip_length, action = ::chooseSimpleDuration)
         selectionButton = button(R.string.select_wallpapers, action = ::chooseWallpapers)
         updateOptions()
         status = label("", 12f, MUTED).apply {
@@ -128,10 +151,12 @@ class SpikeActivity : Activity() {
         started = true
         renderHistory()
         if (!working) showPreview(selection.playback())
+        if (attachedEditorPending) scheduleAttachedEditor()
     }
 
     override fun onStop() {
         started = false
+        input.removeCallbacks(openAttachedEditor)
         trimEditor?.dismiss()
         showPreview(null)
         super.onStop()
@@ -146,6 +171,8 @@ class SpikeActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("advancedMode", advanced)
+        outState.putInt("simpleMinutes", options.minutes)
         outState.putBoolean("downloadAudio", options.includeAudio)
         outState.putInt("downloadHeight", options.height)
         super.onSaveInstanceState(outState)
@@ -172,6 +199,8 @@ class SpikeActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(audioOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)))
                 addView(resolutionOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
+                addView(modeOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
+                addView(durationOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(8) })
             addView(progress, LinearLayout.LayoutParams(MATCH_PARENT, dp(9)).apply { topMargin = dp(8) })
             addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(5) })
@@ -268,7 +297,7 @@ class SpikeActivity : Activity() {
             })
         }
         preferredFocus?.let { id -> (tiles[id] ?: download).requestFocus() }
-        if (history.entries.isEmpty() && !working && status.text.isEmpty()) status.setText(R.string.ready_to_add)
+        if (history.entries.isEmpty() && !working && status.text.isEmpty()) status.setText(readyHint())
     }
 
     private fun tile(entry: SavedWallpaper, selected: Boolean, multiple: Boolean): View {
@@ -421,6 +450,28 @@ class SpikeActivity : Activity() {
         audioOption.text = audioLabel(options)
         resolutionOption.text = getString(R.string.resolution_value, options.height)
         resolutionOption.contentDescription = getString(R.string.resolution_description, options.height)
+        modeOption.setText(if (advanced) R.string.advanced_mode else R.string.simple_mode)
+        modeOption.contentDescription = getString(R.string.clip_mode_description, modeOption.text)
+        durationOption.visibility = if (advanced) View.GONE else View.VISIBLE
+        durationOption.text = getString(R.string.clip_length_value, options.minutes)
+        durationOption.contentDescription = getString(R.string.clip_length_description, options.minutes)
+        download.setText(if (advanced) R.string.choose_clip else R.string.download)
+    }
+
+    private fun readyHint() = if (advanced) R.string.advanced_ready else R.string.simple_ready
+
+    private fun chooseSimpleDuration() {
+        val minutes = (1..5).toList()
+        val labels = minutes.map { resources.getQuantityString(R.plurals.clip_minutes, it, it) }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.clip_length)
+            .setSingleChoiceItems(labels.toTypedArray(), minutes.indexOf(options.minutes)) { dialog, which ->
+                options = options.copy(minutes = minutes[which])
+                updateOptions()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun chooseResolution() {
@@ -519,18 +570,38 @@ class SpikeActivity : Activity() {
         if (!working) download.requestFocus()
     }
 
-    private fun editClip() = withLink { submitted, url, requested ->
+    private fun scheduleAttachedEditor() {
+        input.removeCallbacks(openAttachedEditor)
+        attachedEditorPending = advanced && runCatching { YouTubeUrl.canonical(input.text.toString()) }.isSuccess
+        if (attachedEditorPending && started && !working && trimEditor == null) {
+            input.postDelayed(openAttachedEditor, 500)
+        }
+    }
+
+    private fun openCurrentLink() {
+        if (working || trimEditor != null) return
+        input.removeCallbacks(openAttachedEditor)
+        attachedEditorPending = false
+        withLink { submitted, url, requested ->
+            if (advanced) editClip(submitted, url, requested.copy(minutes = DownloadOptions().minutes))
+            else startDownload(submitted, url, requested)
+        }
+    }
+
+    private fun editClip(submitted: String, url: String, requested: DownloadOptions) {
         runOperation(R.string.starting_download, cancellable = true, action = {
             MediaResolver.prepare(applicationContext, url, requested)
         }) { result ->
             result.onSuccess { source ->
+                if (input.text.toString() != submitted) return@onSuccess
                 withResolution(source, requested) { resolvedOptions ->
                     if (!started || isDestroyed) return@withResolution
-                    status.setText(R.string.ready_to_add)
+                    status.setText(readyHint())
                     showPreview(null)
                     trimEditor = TrimEditor(this, source, resolvedOptions, worker, onDismiss = {
                         trimEditor = null
                         if (started && !working) showPreview(selection.playback())
+                        if (attachedEditorPending) scheduleAttachedEditor()
                     }) { range ->
                         startDownload(submitted, url, resolvedOptions.copy(range = range), source)
                     }.also { it.show() }
@@ -660,7 +731,7 @@ class SpikeActivity : Activity() {
                     ?: playback?.let {
                         getString(if (count > 1) R.string.preview_title else R.string.active_title, it.title)
                     }
-                    ?: getString(R.string.ready_to_add)
+                    ?: getString(readyHint())
                 renderHistory(entry?.id ?: focusId)
                 requestWallpaperUpdate()
             }.onFailure { error ->
@@ -708,12 +779,13 @@ class SpikeActivity : Activity() {
                 progress.visibility = View.GONE
                 complete(result)
                 if (started && !working && trimEditor == null) showPreview(selection.playback())
+                if (attachedEditorPending && !working && trimEditor == null) scheduleAttachedEditor()
             }
         }
     }
 
     private fun setControlsEnabled(enabled: Boolean) {
-        listOf(download, more, audioOption, resolutionOption)
+        listOf(download, more, audioOption, resolutionOption, modeOption, durationOption)
             .forEach { it.isEnabled = enabled }
         selectionButton.isEnabled = enabled && selection.history().entries.size >= 2
     }

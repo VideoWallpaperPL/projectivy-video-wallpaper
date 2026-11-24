@@ -6,7 +6,16 @@
     <string name="choose_clip">Choose clip</string>
     <string name="audio_on">Audio on</string>
     <string name="audio_off">Audio off</string>
+    <string name="simple_mode">Simple</string>
+    <string name="advanced_mode">Advanced</string>
+    <string name="clip_mode_description">Clip mode · %1$s</string>
+    <string name="clip_length">Clip length</string>
     <string name="clip_length_value">%1$d min</string>
+    <string name="clip_length_description">Clip length · %1$d min</string>
+    <plurals name="clip_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
     <string name="clip_option_summary">%1$s · %2$dp · %3$s</string>
     <string name="resolution">Download resolution</string>
     <string name="resolution_value">%1$dp</string>
@@ -42,7 +51,8 @@
     <string name="preview_title">Preview · %1$s</string>
     <string name="history">Recent wallpapers</string>
     <string name="history_empty">Your recent wallpapers will appear here</string>
-    <string name="ready_to_add">Paste a link and choose up to five minutes.</string>
+    <string name="simple_ready">Add a link, choose a length, then download.</string>
+    <string name="advanced_ready">Add a link to open the clip editor.</string>
     <string name="invalid_share">Share a YouTube link or video ID.</string>
     <string name="starting_download">1 of 3 · Checking the link and finding a compatible stream…</string>
     <string name="still_looking">1 of 3 · Still looking for a compatible stream. You can cancel at any time.</string>
