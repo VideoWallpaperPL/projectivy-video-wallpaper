@@ -22,6 +22,7 @@ import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.ExoPlayerAssetLoader
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.InAppMp4Muxer
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import java.io.File
@@ -60,12 +61,12 @@ internal object SourceClip {
         }
     }
 
-    fun preview(context: Context, source: PreparedVideo, range: ClipRange) =
-        sourceFactory(context, source.video).createMediaSource(mediaItem(source.video.uri, range)).let { video ->
+    fun preview(context: Context, source: PreparedVideo) =
+        sourceFactory(context, source.video).createMediaSource(mediaItem(source.video.uri, null)).let { video ->
             val audio = source.audio ?: return@let video
             MergingMediaSource(
-                true, true, video,
-                sourceFactory(context, audio).createMediaSource(mediaItem(audio.uri, range)),
+                true, false, video,
+                sourceFactory(context, audio).createMediaSource(mediaItem(audio.uri, null)),
             )
         }
 
@@ -83,7 +84,11 @@ internal object SourceClip {
         }
         val composition = Composition.Builder(sequences).setTransmuxAudio(true).setTransmuxVideo(true).build()
         onProgress(null)
-        export(context, composition, listOfNotNull(video, audio), output, audio != null, storage, onProgress)
+        export(
+            context, composition, listOfNotNull(video, audio), output, audio != null,
+            useInAppMuxer = range != null && range.startUs > 0,
+            storage, onProgress,
+        )
     }
 
     private fun mediaItem(source: Uri, range: ClipRange?) =
@@ -109,7 +114,7 @@ internal object SourceClip {
 
     private fun export(
         context: Context, composition: Composition, sources: List<ClipSource>, output: File,
-        requireAudioCopy: Boolean, storage: ClipStorage, onProgress: (Int?) -> Unit,
+        requireAudioCopy: Boolean, useInAppMuxer: Boolean, storage: ClipStorage, onProgress: (Int?) -> Unit,
     ) {
         val thread = HandlerThread("Wallpaper source copy").apply { start() }
         val handler = Handler(thread.looper)
@@ -149,6 +154,8 @@ internal object SourceClip {
                             finished.completeExceptionally(error)
                         }
                     })
+                // Some platform MP4 writers reject reordered frame timestamps at a nonzero cut.
+                if (useInAppMuxer) builder.setMuxerFactory(InAppMp4Muxer.Factory())
                 if (sources.any { it.uri.scheme == "https" }) {
                     val decoder = DefaultDecoderFactory.Builder(context).build()
                     val loaders = sources.associateBy(ClipSource::uri) { source ->

@@ -31,6 +31,16 @@ class DownloadOptionsTest {
         assertThrows(IllegalArgumentException::class.java) { ClipRange(90_000_000, 90_000_000) }
         assertThrows(IllegalArgumentException::class.java) { DownloadOptions(height = 2160) }
         assertEquals(90_000_000L, parseTrimTime("1:30"))
+        assertEquals(91_333_000L, parseTrimTime("1:31.333"))
         assertThrows(IllegalArgumentException::class.java) { parseTrimTime("1:60") }
+    }
+
+    @Test
+    fun movingEitherHandleKeepsTheRangePlayableAndWithinFiveMinutes() {
+        val sourceDuration = 420_000_000L
+        val original = ClipRange(0, 120_000_000)
+        assertEquals(ClipRange(120_000_000, 420_000_000), original.moveBoundary(false, sourceDuration, sourceDuration))
+        assertEquals(ClipRange(230_000_000, 231_000_000), original.moveBoundary(true, 230_000_000, sourceDuration))
+        assertEquals(ClipRange(419_000_000, sourceDuration), original.moveBoundary(true, sourceDuration, sourceDuration))
     }
 }

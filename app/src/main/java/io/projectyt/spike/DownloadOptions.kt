@@ -12,6 +12,17 @@ internal data class ClipRange(val startUs: Long, val endUs: Long) {
     }
 
     val durationUs get() = endUs - startUs
+
+    fun moveBoundary(moveStart: Boolean, timeUs: Long, sourceDurationUs: Long): ClipRange {
+        val minimum = minOf(1_000_000L, sourceDurationUs)
+        return if (moveStart) {
+            val start = timeUs.coerceIn(0, sourceDurationUs - minimum)
+            ClipRange(start, endUs.coerceIn(start + minimum, minOf(sourceDurationUs, start + MAX_CLIP_US)))
+        } else {
+            val end = timeUs.coerceIn(minimum, sourceDurationUs)
+            ClipRange(startUs.coerceIn(maxOf(0, end - MAX_CLIP_US), end - minimum), end)
+        }
+    }
 }
 
 internal data class DownloadOptions(

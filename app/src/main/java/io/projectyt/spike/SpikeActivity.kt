@@ -53,9 +53,7 @@ class SpikeActivity : Activity() {
     private lateinit var more: Button
     private lateinit var cancelWork: Button
     private lateinit var audioOption: Button
-    private lateinit var durationOption: Button
     private lateinit var resolutionOption: Button
-    private lateinit var trimOption: Button
     private lateinit var selectionButton: Button
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
@@ -75,9 +73,8 @@ class SpikeActivity : Activity() {
         selection = Selection(this)
         downloadNotice = DownloadNotice(this)
         options = DownloadOptions(
-            savedInstanceState?.getInt("downloadMinutes", 2) ?: 2,
-            savedInstanceState?.getBoolean("downloadAudio", true) ?: true,
-            savedInstanceState?.getInt("downloadHeight", DEFAULT_HEIGHT) ?: DEFAULT_HEIGHT,
+            includeAudio = savedInstanceState?.getBoolean("downloadAudio", true) ?: true,
+            height = savedInstanceState?.getInt("downloadHeight", DEFAULT_HEIGHT) ?: DEFAULT_HEIGHT,
         )
         input = EditText(this).apply {
             setHint(R.string.youtube_input)
@@ -91,21 +88,19 @@ class SpikeActivity : Activity() {
             setPadding(dp(12), 0, dp(12), 0)
             setOnEditorActionListener { _, action, _ ->
                 if (action != EditorInfo.IME_ACTION_GO) false else {
-                    downloadLink()
+                    editClip()
                     true
                 }
             }
         }
-        download = button(R.string.download, primary = true, action = ::downloadLink)
+        download = button(R.string.choose_clip, primary = true, action = ::editClip)
         more = button(R.string.more, action = ::openMore)
         cancelWork = button(android.R.string.cancel, action = ::cancelOperation).apply { visibility = View.GONE }
         audioOption = button(R.string.audio_on) {
             options = options.copy(includeAudio = !options.includeAudio)
             updateOptions()
         }
-        durationOption = button(R.string.clip_length, action = ::chooseDuration)
         resolutionOption = button(R.string.resolution, action = ::chooseResolution)
-        trimOption = button(R.string.trim, action = ::editClip)
         selectionButton = button(R.string.select_wallpapers, action = ::chooseWallpapers)
         updateOptions()
         status = label("", 12f, MUTED).apply {
@@ -151,7 +146,6 @@ class SpikeActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putInt("downloadMinutes", options.minutes)
         outState.putBoolean("downloadAudio", options.includeAudio)
         outState.putInt("downloadHeight", options.height)
         super.onSaveInstanceState(outState)
@@ -177,9 +171,7 @@ class SpikeActivity : Activity() {
             addView(LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(audioOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)))
-                addView(durationOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
                 addView(resolutionOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
-                addView(trimOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(8) })
             addView(progress, LinearLayout.LayoutParams(MATCH_PARENT, dp(9)).apply { topMargin = dp(8) })
             addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(5) })
@@ -427,24 +419,8 @@ class SpikeActivity : Activity() {
 
     private fun updateOptions() {
         audioOption.text = audioLabel(options)
-        durationOption.text = getString(R.string.clip_length_value, options.minutes)
-        durationOption.contentDescription = getString(R.string.clip_length_description, options.minutes)
         resolutionOption.text = getString(R.string.resolution_value, options.height)
         resolutionOption.contentDescription = getString(R.string.resolution_description, options.height)
-    }
-
-    private fun chooseDuration() {
-        val minutes = (1..5).toList()
-        val labels = minutes.map { resources.getQuantityString(R.plurals.minutes, it, it) }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.clip_length)
-            .setSingleChoiceItems(labels.toTypedArray(), options.minutes - 1) { dialog, which ->
-                options = options.copy(minutes = minutes[which])
-                updateOptions()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
     }
 
     private fun chooseResolution() {
@@ -541,10 +517,6 @@ class SpikeActivity : Activity() {
         }
         input.setText(url)
         if (!working) download.requestFocus()
-    }
-
-    private fun downloadLink() = withLink { submitted, url, requested ->
-        startDownload(submitted, url, requested)
     }
 
     private fun editClip() = withLink { submitted, url, requested ->
@@ -741,7 +713,7 @@ class SpikeActivity : Activity() {
     }
 
     private fun setControlsEnabled(enabled: Boolean) {
-        listOf(download, more, audioOption, durationOption, resolutionOption, trimOption)
+        listOf(download, more, audioOption, resolutionOption)
             .forEach { it.isEnabled = enabled }
         selectionButton.isEnabled = enabled && selection.history().entries.size >= 2
     }

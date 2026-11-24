@@ -39,7 +39,7 @@ These v0.7 screenshots use original sample artwork.
 ## Features
 
 - **Local import.** Open **More → Add MP4 file** to import 720p or 1080p H.264 video. The app keeps audio when present. Local MP4 imports keep the two-minute limit.
-- **On-device downloads.** Paste or share a YouTube link or video ID. Choose a quick clip length from one to five minutes and turn audio on or off. Choose **Trim** to set start and end times and preview a segment. The app can move the start to the next video keyframe and shows the adjusted range before saving.
+- **On-device clip editor.** Paste or share a YouTube link or video ID, choose whether to include audio, and select **Choose clip**. Play the preview, set start and end with the two handles or timestamps, then download up to five minutes. With the timeline focused, use the remote’s left and right buttons to adjust a handle and OK to switch handles. The app shows and previews any adjustment to the start before saving.
 - **Download quality.** 720p is the default. The v0.8 build also offers 1080p when a compatible H.264 stream is available. It offers to switch to 720p if needed. Video and optional AAC audio are copied into the MP4 at source quality. The app prefers streams up to 30 fps when available.
 - **Download progress.** Follow source lookup, copying, and saving, with an option to cancel. Clip size depends on available device storage. The app selects and previews each finished clip. If multiple wallpapers are selected, the new clip joins them.
 - **Wallpaper library.** Browse the 12 newest clips with your TV remote. Select a thumbnail to set it as the background or delete the app’s saved copy.
