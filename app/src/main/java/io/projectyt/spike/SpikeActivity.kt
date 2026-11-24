@@ -4,10 +4,13 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -32,6 +35,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -51,6 +55,7 @@ class SpikeActivity : Activity() {
     private lateinit var selection: Selection
     private lateinit var downloadNotice: DownloadNotice
     private lateinit var input: EditText
+    private lateinit var clearLink: ImageButton
     private lateinit var download: Button
     private lateinit var more: Button
     private lateinit var cancelWork: Button
@@ -62,6 +67,7 @@ class SpikeActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
     private lateinit var preview: VideoView
+    private lateinit var previewControl: ImageButton
     private lateinit var placeholder: TextView
     private lateinit var historyLabel: TextView
     private lateinit var grid: LinearLayout
@@ -70,6 +76,7 @@ class SpikeActivity : Activity() {
     private var advanced = false
     private var attachedEditorPending = false
     private var previewId: String? = null
+    private var previewPaused = false
     private var options = DownloadOptions()
     private var operation: Operation? = null
     private var trimEditor: TrimEditor? = null
@@ -87,6 +94,10 @@ class SpikeActivity : Activity() {
             includeAudio = savedInstanceState?.getBoolean("downloadAudio", true) ?: true,
             height = savedInstanceState?.getInt("downloadHeight", DEFAULT_HEIGHT) ?: DEFAULT_HEIGHT,
         )
+        clearLink = iconButton(R.drawable.ui_close, R.string.clear_link) {
+            input.text.clear()
+            input.requestFocus()
+        }.apply { visibility = View.GONE }
         input = EditText(this).apply {
             setHint(R.string.youtube_input)
             setSingleLine()
@@ -94,9 +105,11 @@ class SpikeActivity : Activity() {
             imeOptions = EditorInfo.IME_ACTION_GO
             setTextColor(INK)
             setHintTextColor(MUTED)
-            textSize = 14f
-            background = focusBackground(FIELD, 10)
-            setPadding(dp(12), 0, dp(12), 0)
+            textSize = 15f
+            background = stateDrawable(
+                surface(FIELD, 15, OUTLINE, 2), surface(FIELD, 15, BORDER),
+            )
+            setPaddingRelative(dp(49), 0, dp(42), 0)
             setOnEditorActionListener { _, action, _ ->
                 if (action != EditorInfo.IME_ACTION_GO) false else {
                     openCurrentLink()
@@ -106,25 +119,41 @@ class SpikeActivity : Activity() {
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) = Unit
-                override fun afterTextChanged(text: Editable?) = scheduleAttachedEditor()
+                override fun afterTextChanged(text: Editable?) {
+                    clearLink.visibility = if (text.isNullOrEmpty()) View.GONE else View.VISIBLE
+                    scheduleAttachedEditor()
+                }
             })
         }
-        download = button(R.string.download, primary = true, action = ::openCurrentLink)
-        more = button(R.string.more, action = ::openMore)
-        cancelWork = button(android.R.string.cancel, action = ::cancelOperation).apply { visibility = View.GONE }
+        download = button(R.string.download, primary = true, action = ::openCurrentLink).apply {
+            homeButton(R.drawable.ui_download, prominent = true)
+        }
+        more = button(R.string.settings, action = ::openMore).apply { homeButton(R.drawable.ui_settings) }
+        cancelWork = button(android.R.string.cancel, action = ::cancelOperation).apply {
+            homeButton(R.drawable.ui_close)
+            visibility = View.GONE
+        }
         audioOption = button(R.string.audio_on) {
             options = options.copy(includeAudio = !options.includeAudio)
             updateOptions()
         }
-        resolutionOption = button(R.string.resolution, action = ::chooseResolution)
+        audioOption.homeButton(R.drawable.ui_audio)
+        resolutionOption = button(R.string.resolution, action = ::chooseResolution).apply {
+            homeButton(R.drawable.ui_quality)
+        }
         modeOption = button(R.string.simple_mode) {
             advanced = !advanced
             updateOptions()
             status.setText(readyHint())
             scheduleAttachedEditor()
         }
-        durationOption = button(R.string.clip_length, action = ::chooseSimpleDuration)
-        selectionButton = button(R.string.select_wallpapers, action = ::chooseWallpapers)
+        modeOption.homeButton(R.drawable.ui_layers)
+        durationOption = button(R.string.clip_length, action = ::chooseSimpleDuration).apply {
+            homeButton(R.drawable.ui_clock)
+        }
+        selectionButton = button(R.string.select_wallpapers, action = ::chooseWallpapers).apply {
+            homeButton(R.drawable.ui_layers)
+        }
         updateOptions()
         status = label("", 12f, MUTED).apply {
             maxLines = 2
@@ -132,12 +161,12 @@ class SpikeActivity : Activity() {
         }
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            indeterminateTintList = ColorStateList.valueOf(MINT)
-            progressTintList = ColorStateList.valueOf(MINT)
+            indeterminateTintList = ColorStateList.valueOf(ACCENT)
+            progressTintList = ColorStateList.valueOf(ACCENT)
             progressBackgroundTintList = ColorStateList.valueOf(BORDER)
             visibility = View.GONE
         }
-        historyLabel = label("", 20f, INK, bold = true).apply {
+        historyLabel = label("", if (wideLayout) 23f else 18f, INK, bold = true).apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isAccessibilityHeading = true
         }
         grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -184,83 +213,154 @@ class SpikeActivity : Activity() {
         acceptSharedInput(intent)
     }
 
+    private val wideLayout get() = resources.configuration.screenWidthDp >= 680
+
+    private val historyColumns get() = if (
+        wideLayout || (resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) ==
+        Configuration.UI_MODE_TYPE_TELEVISION
+    ) 6 else 3
+
     private fun screen(): View {
-        val editor = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = surface(PANEL, 16, BORDER)
-            setPadding(dp(14), dp(12), dp(14), dp(10))
-            addView(LinearLayout(context).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                addView(input, LinearLayout.LayoutParams(0, dp(44), 1f))
-                addView(download, LinearLayout.LayoutParams(WRAP_CONTENT, dp(44)).apply { marginStart = dp(8) })
-                addView(cancelWork, LinearLayout.LayoutParams(WRAP_CONTENT, dp(44)).apply { marginStart = dp(8) })
-            })
-            addView(LinearLayout(context).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                addView(audioOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)))
-                addView(resolutionOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
-                addView(modeOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
-                addView(durationOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
-            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(8) })
-            addView(progress, LinearLayout.LayoutParams(MATCH_PARENT, dp(9)).apply { topMargin = dp(8) })
-            addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(5) })
-        }
-        val previewCard = FrameLayout(this).apply {
-            background = surface(FIELD, 14, BORDER)
-            clipToOutline = true
-            placeholder = label(getString(R.string.preview_label), 12f, MUTED).apply { gravity = Gravity.CENTER }
-            addView(placeholder, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-            preview = VideoView(context).apply {
-                isFocusable = false
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                visibility = View.INVISIBLE
-                setOnPreparedListener { player ->
-                    player.isLooping = true
-                }
-                setOnErrorListener { _, _, _ ->
-                    showPreview(null)
-                    status.setText(R.string.preview_unavailable)
-                    true
-                }
-            }
-            addView(preview, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT, Gravity.CENTER))
-        }
-        val top = LinearLayout(this).apply {
-            orientation = if (resources.configuration.screenWidthDp >= 640) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-            if (orientation == LinearLayout.HORIZONTAL) {
-                addView(editor, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-                addView(previewCard, LinearLayout.LayoutParams(dp(190), dp(112)).apply { marginStart = dp(14) })
-            } else {
-                addView(editor, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-                addView(previewCard, LinearLayout.LayoutParams(MATCH_PARENT, dp(120)).apply { topMargin = dp(10) })
-            }
-        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(16), dp(24), dp(24))
+            val inset = dp(if (wideLayout) 34 else 20)
+            setPadding(inset, dp(19), inset, dp(24))
+            addView(header())
+            addView(composer(), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(18) })
             addView(LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                addView(label(getString(R.string.screen_title), 29f, INK, bold = true),
-                    LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-                addView(more, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)))
-            })
-            addView(top, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(12) })
-            addView(LinearLayout(context).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                addView(historyLabel, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-                addView(selectionButton, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
+                addView(iconView(R.drawable.ui_clock).apply {
+                    background = surface(ICON_WELL, 13)
+                    setPadding(dp(9), dp(9), dp(9), dp(9))
+                }, LinearLayout.LayoutParams(dp(41), dp(35)))
+                addView(historyLabel, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = dp(12) })
+                addView(selectionButton, LinearLayout.LayoutParams(WRAP_CONTENT, dp(36)).apply { marginStart = dp(8) })
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                topMargin = dp(16)
-                bottomMargin = dp(9)
+                topMargin = dp(22)
+                bottomMargin = dp(13)
             })
             addView(grid)
         }
-        return ScrollView(this).apply {
-            setBackgroundColor(CANVAS)
-            isFillViewport = true
-            isVerticalScrollBarEnabled = false
-            addView(content)
+        return FrameLayout(this).apply {
+            background = gradient(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(CANVAS, CANVAS, CANVAS_END))
+            addView(headerArtwork(), FrameLayout.LayoutParams(MATCH_PARENT, dp(if (wideLayout) 218 else 190)))
+            addView(ScrollView(context).apply {
+                isFillViewport = true
+                isVerticalScrollBarEnabled = false
+                addView(content)
+            }, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         }
+    }
+
+    private fun headerArtwork() = FrameLayout(this).apply {
+        addView(iconView(R.drawable.wallpaper_header).apply {
+            scaleType = ImageView.ScaleType.MATRIX
+            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                val image = drawable ?: return@addOnLayoutChangeListener
+                val scale = maxOf(width.toFloat() / image.intrinsicWidth, height.toFloat() / image.intrinsicHeight)
+                imageMatrix = Matrix().apply {
+                    setScale(scale, scale)
+                    postTranslate((width - image.intrinsicWidth * scale) / 2,
+                        (height - image.intrinsicHeight * scale) * 0.34f)
+                }
+            }
+        }, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        addView(View(context).apply {
+            background = gradient(
+                GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF00D131D.toInt(), 0x690D131D, 0x160D131D),
+            )
+        }, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        addView(View(context).apply {
+            background = gradient(
+                GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x100D131D, 0x210D131D, 0xC00D131D.toInt(), CANVAS),
+            )
+        }, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+    }
+
+    private fun header() = LinearLayout(this).apply {
+        gravity = Gravity.CENTER_VERTICAL
+        addView(iconView(R.drawable.ui_header_mark), LinearLayout.LayoutParams(dp(if (wideLayout) 51 else 38), dp(49)))
+        addView(View(context).apply { setBackgroundColor(0x8053637C.toInt()) },
+            LinearLayout.LayoutParams(dp(1), dp(43)).apply {
+                marginStart = dp(12)
+                marginEnd = dp(17)
+            })
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(label(getString(R.string.screen_title), if (wideLayout) 27f else 20f, INK, bold = true))
+            addView(label(getString(R.string.screen_subtitle), if (wideLayout) 14f else 12f, MUTED))
+        }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        addView(more, LinearLayout.LayoutParams(WRAP_CONTENT, dp(35)).apply { marginStart = dp(8) })
+    }
+
+    private fun composer(): View {
+        val editor = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val field = FrameLayout(context).apply {
+                addView(input, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                addView(iconView(R.drawable.ui_link_video), FrameLayout.LayoutParams(dp(29), dp(29),
+                    Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = dp(13) })
+                addView(clearLink, FrameLayout.LayoutParams(dp(30), dp(30),
+                    Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = dp(7) })
+            }
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(field, LinearLayout.LayoutParams(0, dp(44), 1f))
+                addView(download, LinearLayout.LayoutParams(WRAP_CONTENT, dp(44)).apply { marginStart = dp(12) })
+                addView(cancelWork, LinearLayout.LayoutParams(WRAP_CONTENT, dp(44)).apply { marginStart = dp(12) })
+            })
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                listOf(audioOption, resolutionOption, modeOption, durationOption).forEachIndexed { index, option ->
+                    addView(option, LinearLayout.LayoutParams(WRAP_CONTENT, dp(36)).apply {
+                        if (index > 0) marginStart = dp(if (wideLayout) 10 else 5)
+                    })
+                }
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(12) })
+            addView(progress, LinearLayout.LayoutParams(MATCH_PARENT, dp(7)).apply { topMargin = dp(8) })
+            addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(3) })
+        }
+        return LinearLayout(this).apply {
+            orientation = if (wideLayout) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = gradient(
+                GradientDrawable.Orientation.TL_BR, intArrayOf(0xE628354B.toInt(), 0xEF161F30.toInt(), 0xF0202840.toInt()),
+                17, 0xC3303E55.toInt(),
+            )
+            setPadding(dp(15), dp(13), dp(15), dp(13))
+            if (wideLayout) {
+                addView(editor, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(previewCard(), LinearLayout.LayoutParams(dp(200), dp(112)).apply { marginStart = dp(20) })
+            } else {
+                addView(editor, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                addView(previewCard(), LinearLayout.LayoutParams(MATCH_PARENT, dp(132)).apply { topMargin = dp(10) })
+            }
+        }
+    }
+
+    private fun previewCard() = FrameLayout(this).apply {
+        background = surface(FIELD, 14, BORDER)
+        clipToOutline = true
+        placeholder = label(getString(R.string.preview_label), 12f, MUTED).apply { gravity = Gravity.CENTER }
+        addView(placeholder, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        preview = VideoView(context).apply {
+            isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            visibility = View.INVISIBLE
+            setOnPreparedListener { it.isLooping = true }
+            setOnErrorListener { _, _, _ ->
+                showPreview(null)
+                status.setText(R.string.preview_unavailable)
+                true
+            }
+        }
+        addView(preview, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT, Gravity.CENTER))
+        previewControl = iconButton(R.drawable.ui_pause, R.string.pause_background_preview) {
+            if (previewPaused) preview.start() else preview.pause()
+            previewPaused = !previewPaused
+            updatePreviewControl()
+        }.apply { visibility = View.GONE }
+        addView(previewControl, FrameLayout.LayoutParams(dp(39), dp(39), Gravity.CENTER))
     }
 
     private fun renderHistory(preferredFocus: String? = null) {
@@ -276,20 +376,16 @@ class SpikeActivity : Activity() {
         grid.removeAllViews()
         thumbnailViews.clear()
         tiles.clear()
-        repeat(3) { row ->
+        val columns = historyColumns
+        repeat(HISTORY_LIMIT / columns) { row ->
             val strip = LinearLayout(this)
-            repeat(4) { column ->
-                val entry = history.entries.getOrNull(row * 4 + column)
-                val card = if (entry == null) {
-                    View(this).apply {
-                        background = surface(SLOT, 12, BORDER)
-                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                    }
-                } else {
-                    tile(entry, entry.id in history.selectedIds, selectedCount > 1)
-                }
-                strip.addView(card, LinearLayout.LayoutParams(0, dp(86), 1f).apply {
-                    if (column > 0) marginStart = dp(10)
+            repeat(columns) { column ->
+                val index = row * columns + column
+                val entry = history.entries.getOrNull(index)
+                val card = if (entry == null) emptyTile(index == history.entries.size)
+                else tile(entry, entry.id in history.selectedIds, selectedCount > 1)
+                strip.addView(card, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
+                    if (column > 0) marginStart = dp(if (columns == 6) 9 else 7)
                 })
             }
             grid.addView(strip, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
@@ -300,13 +396,35 @@ class SpikeActivity : Activity() {
         if (history.entries.isEmpty() && !working && status.text.isEmpty()) status.setText(readyHint())
     }
 
+    private fun emptyTile(showAdd: Boolean) = WallpaperTile(this).apply {
+        background = gradient(GradientDrawable.Orientation.TL_BR, intArrayOf(EMPTY_START, EMPTY_END), 13, BORDER)
+        if (showAdd) {
+            isFocusable = true
+            contentDescription = getString(R.string.add_wallpaper)
+            foreground = stateDrawable(surface(Color.TRANSPARENT, 13, OUTLINE, 3), surface(Color.TRANSPARENT, 13))
+            addView(iconView(R.drawable.ui_plus).apply { alpha = 0.61f },
+                FrameLayout.LayoutParams(dp(25), dp(25), Gravity.CENTER))
+            setOnClickListener {
+                if (!working) {
+                    input.requestFocus()
+                    getSystemService(InputMethodManager::class.java).showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+                }
+            }
+        } else {
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+    }
+
     private fun tile(entry: SavedWallpaper, selected: Boolean, multiple: Boolean): View {
-        val card = FrameLayout(this).apply {
+        val card = WallpaperTile(this).apply {
             isFocusable = true
             isClickable = true
-            background = surface(SLOT, 12, BORDER)
+            background = surface(SLOT, 13, BORDER)
             clipToOutline = true
-            foreground = stateDrawable(surface(Color.TRANSPARENT, 12, MINT, 3), surface(Color.TRANSPARENT, 12))
+            foreground = stateDrawable(
+                surface(Color.TRANSPARENT, 13, OUTLINE, 3),
+                surface(Color.TRANSPARENT, 13, if (selected) ACCENT else BORDER, if (selected) 2 else 1),
+            )
             contentDescription = when {
                 selected && multiple -> getString(R.string.selected_title, entry.title)
                 selected -> getString(R.string.active_title, entry.title)
@@ -319,18 +437,20 @@ class SpikeActivity : Activity() {
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         card.addView(image, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-        val caption = label(entry.title, 13f, INK, bold = true).apply {
+        val caption = label(entry.title, if (wideLayout) 13f else 11f, INK, bold = true).apply {
             gravity = Gravity.BOTTOM or Gravity.START
             setSingleLine()
             ellipsize = TextUtils.TruncateAt.END
             setPadding(dp(9), 0, dp(9), dp(7))
-            background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xF0000910.toInt(), Color.TRANSPARENT))
+            background = gradient(
+                GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xF109101A.toInt(), 0xB009101A.toInt(), Color.TRANSPARENT),
+            )
         }
         card.addView(caption, FrameLayout.LayoutParams(MATCH_PARENT, dp(36), Gravity.BOTTOM))
         if (selected) {
             val badge = label(getString(if (multiple) R.string.selected else R.string.active), 10f, DARK_INK, bold = true).apply {
-                setPadding(dp(7), dp(3), dp(7), dp(3))
-                background = surface(MINT, 6)
+                setPadding(dp(8), dp(3), dp(8), dp(3))
+                background = surface(MINT, 12)
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
             card.addView(badge, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
@@ -362,7 +482,11 @@ class SpikeActivity : Activity() {
                     reader.getScaledFrameAtTime(time, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 320, 180)
                 } else {
                     reader.getFrameAtTime(time, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.let { frame ->
-                        val scaled = Bitmap.createScaledBitmap(frame, 320, 180, true)
+                        val scale = minOf(320f / frame.width, 180f / frame.height, 1f)
+                        val scaled = Bitmap.createScaledBitmap(
+                            frame, (frame.width * scale).toInt().coerceAtLeast(1),
+                            (frame.height * scale).toInt().coerceAtLeast(1), true,
+                        )
                         if (scaled !== frame) frame.recycle()
                         scaled
                     }
@@ -448,9 +572,12 @@ class SpikeActivity : Activity() {
 
     private fun updateOptions() {
         audioOption.text = audioLabel(options)
+        audioOption.setHomeIcon(if (options.includeAudio) R.drawable.ui_audio else R.drawable.ui_muted)
+        audioOption.isSelected = options.includeAudio
         resolutionOption.text = getString(R.string.resolution_value, options.height)
         resolutionOption.contentDescription = getString(R.string.resolution_description, options.height)
         modeOption.setText(if (advanced) R.string.advanced_mode else R.string.simple_mode)
+        modeOption.isSelected = advanced
         modeOption.contentDescription = getString(R.string.clip_mode_description, modeOption.text)
         durationOption.visibility = if (advanced) View.GONE else View.VISIBLE
         durationOption.text = getString(R.string.clip_length_value, options.minutes)
@@ -490,7 +617,7 @@ class SpikeActivity : Activity() {
 
     private fun openMore() {
         AlertDialog.Builder(this)
-            .setTitle(R.string.more)
+            .setTitle(R.string.settings)
             .setItems(arrayOf(getString(R.string.add_file), getString(R.string.setup_help))) { _, item ->
                 if (item == 0) pickFile() else showSetup()
             }
@@ -785,7 +912,7 @@ class SpikeActivity : Activity() {
     }
 
     private fun setControlsEnabled(enabled: Boolean) {
-        listOf(download, more, audioOption, resolutionOption, modeOption, durationOption)
+        listOf(download, more, audioOption, resolutionOption, modeOption, durationOption, clearLink)
             .forEach { it.isEnabled = enabled }
         selectionButton.isEnabled = enabled && selection.history().entries.size >= 2
     }
@@ -834,8 +961,10 @@ class SpikeActivity : Activity() {
     private fun showPreview(entry: WallpaperPlayback?) {
         if (entry?.id == previewId) return
         previewId = entry?.id
+        previewPaused = false
         preview.stopPlayback()
         placeholder.visibility = if (entry == null) View.VISIBLE else View.INVISIBLE
+        updatePreviewControl()
         if (entry == null) {
             preview.visibility = View.INVISIBLE
         } else {
@@ -844,6 +973,14 @@ class SpikeActivity : Activity() {
             preview.visibility = View.VISIBLE
             preview.start()
         }
+    }
+
+    private fun updatePreviewControl() {
+        previewControl.visibility = if (previewId == null) View.GONE else View.VISIBLE
+        previewControl.setImageResource(if (previewPaused) R.drawable.ui_play else R.drawable.ui_pause)
+        previewControl.contentDescription = getString(
+            if (previewPaused) R.string.play_background_preview else R.string.pause_background_preview,
+        )
     }
 
     private fun requestWallpaperUpdate() {
@@ -886,6 +1023,52 @@ class SpikeActivity : Activity() {
         setOnClickListener { action() }
     }
 
+    private fun iconView(icon: Int) = ImageView(this).apply {
+        setImageResource(icon)
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+
+    private fun iconButton(icon: Int, description: Int, action: () -> Unit) = ImageButton(this).apply {
+        setImageResource(icon)
+        contentDescription = getString(description)
+        backgroundTintList = null
+        stateListAnimator = null
+        background = stateDrawable(surface(0xE62A314A.toInt(), 50, OUTLINE, 2), surface(0xCA1B2537.toInt(), 50))
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        setPadding(dp(9), dp(9), dp(9), dp(9))
+        setOnClickListener { action() }
+    }
+
+    private fun Button.homeButton(icon: Int, prominent: Boolean = false) {
+        textSize = if (wideLayout) 14f else 13f
+        val padding = dp(if (prominent && wideLayout) 20 else if (wideLayout) 12 else 8)
+        setPaddingRelative(padding, 0, padding, 0)
+        setHomeIcon(icon)
+        background = StateListDrawable().apply {
+            val colors = if (prominent) intArrayOf(0xFF7A63F8.toInt(), 0xFF4A50DD.toInt(), 0xFF327CE5.toInt())
+            else intArrayOf(0xFF222D41.toInt(), 0xFF182133.toInt())
+            val direction = GradientDrawable.Orientation.TL_BR
+            addState(intArrayOf(-android.R.attr.state_enabled), surface(SLOT, 14, BORDER))
+            addState(intArrayOf(android.R.attr.state_focused), gradient(direction, colors, 14, OUTLINE, 2))
+            addState(intArrayOf(android.R.attr.state_pressed), gradient(direction, colors, 14, OUTLINE, 2))
+            addState(intArrayOf(android.R.attr.state_selected),
+                gradient(direction, intArrayOf(0xFF352555.toInt(), 0xFF251D3B.toInt()), 14, ACCENT))
+            addState(intArrayOf(), gradient(direction, colors, 14, if (prominent) null else BORDER))
+        }
+        setTextColor(ColorStateList(
+            arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
+            intArrayOf(MUTED, INK),
+        ))
+    }
+
+    private fun Button.setHomeIcon(icon: Int) {
+        val size = dp(if (wideLayout) 19 else 15)
+        val graphic = getDrawable(icon)?.apply { setBounds(0, 0, size, size) }
+        setCompoundDrawablesRelative(graphic, null, null, null)
+        compoundDrawablePadding = dp(if (wideLayout) 7 else 4)
+    }
+
     private fun focusBackground(color: Int, radius: Int) =
         stateDrawable(surface(color, radius, OUTLINE, 3), surface(color, radius, BORDER), surface(SLOT, radius, BORDER))
 
@@ -903,19 +1086,38 @@ class SpikeActivity : Activity() {
         if (stroke != null) setStroke(dp(width), stroke)
     }
 
+    private fun gradient(
+        orientation: GradientDrawable.Orientation, colors: IntArray, radius: Int = 0, stroke: Int? = null, width: Int = 1,
+    ) = GradientDrawable(orientation, colors).apply {
+        cornerRadius = dp(radius).toFloat()
+        if (stroke != null) setStroke(dp(width), stroke)
+    }
+
     private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
+
+    private class WallpaperTile(context: Context) : FrameLayout(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val height = (MeasureSpec.getSize(widthMeasureSpec) * 9 + 8) / 16
+            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+        }
+    }
 
     private companion object {
         const val PICK_VIDEO = 1
         val CANVAS = Color.rgb(12, 17, 25)
+        val CANVAS_END = Color.rgb(19, 28, 47)
         val PANEL = Color.rgb(24, 34, 47)
         val SLOT = Color.rgb(19, 27, 38)
         val FIELD = Color.rgb(15, 24, 34)
         val BORDER = Color.rgb(43, 58, 74)
+        val EMPTY_START = Color.rgb(18, 27, 43)
+        val EMPTY_END = Color.rgb(24, 34, 53)
+        val ICON_WELL = Color.rgb(42, 31, 77)
         val INK = Color.rgb(239, 246, 249)
         val MUTED = Color.rgb(168, 187, 202)
         val MINT = Color.rgb(125, 229, 190)
-        val OUTLINE = Color.rgb(208, 255, 235)
+        val ACCENT = Color.rgb(166, 127, 255)
+        val OUTLINE = Color.rgb(220, 205, 255)
         val DARK_INK = Color.rgb(7, 34, 29)
         val DANGER = Color.rgb(255, 164, 164)
     }

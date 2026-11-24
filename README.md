@@ -38,11 +38,11 @@ These v0.7 screenshots use original sample artwork.
 
 ## Features
 
-- **Local import.** Open **More → Add MP4 file** to import 720p or 1080p H.264 video. The app keeps audio when present. Local MP4 imports keep the two-minute limit.
+- **Local import.** Open **Settings → Add MP4 file** to import 720p or 1080p H.264 video. The app keeps audio when present. Local MP4 imports keep the two-minute limit.
 - **Simple and Advanced clips.** In **Simple**, add a YouTube link or video ID and use **Download** to save the first one to five minutes. The default is two minutes. Switch to **Advanced** to open the editor when you add a link. Play the preview, set start and end with the two handles or timestamps, then download up to five minutes. With the timeline focused, use the remote’s left and right buttons to adjust a handle and OK to switch handles. The app shows and previews any adjustment to the start before saving.
 - **Download quality.** 720p is the default. The v0.8 build also offers 1080p when a compatible H.264 stream is available. It offers to switch to 720p if needed. Video and optional AAC audio are copied into the MP4 at source quality. The app prefers streams up to 30 fps when available.
 - **Download progress.** Follow source lookup, copying, and saving, with an option to cancel. Clip size depends on available device storage. The app selects and previews each finished clip. If multiple wallpapers are selected, the new clip joins them.
-- **Wallpaper library.** Browse the 12 newest clips with your TV remote. Select a thumbnail to set it as the background or delete the app’s saved copy.
+- **Wallpaper library.** Browse the 12 newest clips in a six-by-two grid on TV. Select a thumbnail to set it as the background or delete the app’s saved copy.
 - **Multiple wallpapers.** Open **Select wallpapers**, check the clips you want, and choose **Apply selection**. Projectivy receives the individual videos and controls when it switches between them.
 - **Local storage.** Clips and the library stay on the device. YouTube requests go from the TV to YouTube and its media hosts. The app uses no developer backend, analytics, or account credentials.
 
