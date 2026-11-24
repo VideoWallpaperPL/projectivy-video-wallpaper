@@ -48,6 +48,13 @@ internal class TrimEditor(
     private val start = timestamp(R.string.trim_start)
     private val end = timestamp(R.string.trim_end)
     private val texture = TextureView(activity)
+    private val previewStatus = label(activity.getString(R.string.trim_preview_unavailable), 13f).apply {
+        gravity = Gravity.CENTER
+        setPadding(dp(12), dp(8), dp(12), dp(8))
+        setBackgroundColor(0xD818222F.toInt())
+        accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        visibility = View.GONE
+    }
     private val title = label(source.title, 15f).apply {
         setSingleLine()
         ellipsize = TextUtils.TruncateAt.END
@@ -155,6 +162,7 @@ internal class TrimEditor(
             background = rounded(Color.BLACK, 10)
             clipToOutline = true
             addView(texture, FrameLayout.LayoutParams(-1, -1))
+            addView(previewStatus, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
         }, LinearLayout.LayoutParams(-1, dp(previewHeight())).apply { topMargin = dp(12) })
         addView(LinearLayout(activity).apply {
             gravity = Gravity.CENTER
@@ -193,7 +201,10 @@ internal class TrimEditor(
             addListener(object : Player.Listener {
                 override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = showPlaying(playWhenReady)
                 override fun onPlayerError(error: PlaybackException) {
-                    if (!checking) info.setText(R.string.trim_preview_unavailable)
+                    previewStatus.visibility = View.VISIBLE
+                }
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY) previewStatus.visibility = View.GONE
                 }
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
                     texture.post { fitPreview(videoSize) }

@@ -10,6 +10,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.Clock
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -109,7 +110,7 @@ internal object SourceClip {
             .setConnectTimeoutMs(10_000)
             .setReadTimeoutMs(10_000)
             .setDefaultRequestProperties(source.headers)
-        return DefaultMediaSourceFactory(context).setDataSourceFactory(dataSource)
+        return DefaultMediaSourceFactory(context).setDataSourceFactory(DefaultDataSource.Factory(context, dataSource))
     }
 
     private fun export(

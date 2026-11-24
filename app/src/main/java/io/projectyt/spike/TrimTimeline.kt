@@ -1,16 +1,17 @@
 package io.projectyt.spike
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RectF
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
+@SuppressLint("ViewConstructor") // Created by the editor with the source duration and callbacks.
 internal class TrimTimeline(
     context: Context,
     private val durationUs: Long,
@@ -50,8 +51,8 @@ internal class TrimTimeline(
         val middle = height / 2f
         val start = x(range.startUs)
         val end = x(range.endUs)
-        rounded(canvas, RectF(inset, middle - dp(13f), width - inset, middle + dp(13f)), dp(6f), 0xFF344252.toInt())
-        rounded(canvas, RectF(start, middle - dp(13f), end, middle + dp(13f)), dp(5f), 0xFF53CDAB.toInt())
+        rounded(canvas, inset, middle - dp(13f), width - inset, middle + dp(13f), dp(6f), 0xFF344252.toInt())
+        rounded(canvas, start, middle - dp(13f), end, middle + dp(13f), dp(5f), 0xFF53CDAB.toInt())
 
         val playhead = x(playheadUs)
         paint.color = 0xFFF8FFFD.toInt()
@@ -63,21 +64,22 @@ internal class TrimTimeline(
 
     private fun drawHandle(canvas: Canvas, x: Float, middle: Float, selected: Boolean) {
         val active = selected && isFocused
-        val handle = RectF(x - dp(6f), middle - dp(17f), x + dp(6f), middle + dp(17f))
         if (active) {
-            val outline = RectF(handle).apply { inset(-dp(3f), -dp(3f)) }
-            rounded(canvas, outline, dp(6f), Color.WHITE)
+            rounded(canvas, x - dp(9f), middle - dp(20f), x + dp(9f), middle + dp(20f), dp(6f), Color.WHITE)
         }
-        rounded(canvas, handle, dp(4f), if (active) 0xFF177C65.toInt() else 0xFFABF3DD.toInt())
+        rounded(canvas, x - dp(6f), middle - dp(17f), x + dp(6f), middle + dp(17f), dp(4f),
+            if (active) 0xFF177C65.toInt() else 0xFFABF3DD.toInt())
         paint.color = if (active) Color.WHITE else 0xFF25574B.toInt()
         paint.strokeWidth = dp(1f)
         canvas.drawLine(x - dp(2f), middle - dp(6f), x - dp(2f), middle + dp(6f), paint)
         canvas.drawLine(x + dp(2f), middle - dp(6f), x + dp(2f), middle + dp(6f), paint)
     }
 
-    private fun rounded(canvas: Canvas, bounds: RectF, radius: Float, color: Int) {
+    private fun rounded(
+        canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float, radius: Float, color: Int,
+    ) {
         paint.color = color
-        canvas.drawRoundRect(bounds, radius, radius, paint)
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, paint)
     }
 
     override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
