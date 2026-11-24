@@ -69,8 +69,8 @@ internal class TrimEditor(
         setTextColor(MUTED)
     }
     private val play = transport("▶", R.string.trim_play, ::togglePlayback)
-    private val jumpStart = transport("│◀", R.string.trim_jump_start) { seekTo(range.startUs) }
-    private val jumpEnd = transport("▶│", R.string.trim_jump_end) { seekTo(lastFramePosition()) }
+    private val jumpStart = transport("│◀", R.string.trim_jump_start) { jumpToBoundary(true) }
+    private val jumpEnd = transport("▶│", R.string.trim_jump_end) { jumpToBoundary(false) }
     private val timeline by lazy {
         TrimTimeline(activity, source.durationUs, range, ::moveHandle) { startHandle, focused ->
             if (focused && !checking) {
@@ -223,12 +223,23 @@ internal class TrimEditor(
 
     private fun togglePlayback() {
         val playback = player ?: return
+        val previous = range
+        if (!commitFields()) return
+        handler.removeCallbacks(delayedSeek)
         if (playback.playWhenReady) {
             playback.pause()
         } else {
-            if (playback.currentPosition * 1000 !in range.startUs until range.endUs) seekTo(range.startUs)
+            if (range != previous || playback.currentPosition * 1000 !in range.startUs until lastFramePosition()) {
+                seekTo(range.startUs)
+            }
             playback.play()
         }
+    }
+
+    private fun jumpToBoundary(moveStart: Boolean) {
+        if (!commitFields()) return
+        handler.removeCallbacks(delayedSeek)
+        seekTo(if (moveStart) range.startUs else lastFramePosition())
     }
 
     private fun displayPosition(timeUs: Long) {
@@ -296,8 +307,10 @@ internal class TrimEditor(
         return true
     }
 
+    private fun commitFields() = commitField(start, true) && commitField(end, false)
+
     private fun checkAndDownload() {
-        if (!commitField(start, true) || !commitField(end, false)) return
+        if (!commitFields()) return
         val requested = range
         if (requested.startUs == 0L || confirmedRange == requested) {
             download(requested)
