@@ -607,7 +607,8 @@ class SpikeActivity : Activity() {
         durationOption.visibility = if (advanced) View.GONE else View.VISIBLE
         durationOption.text = getString(R.string.clip_length_value, options.minutes)
         durationOption.contentDescription = getString(R.string.clip_length_description, options.minutes)
-        download.setText(if (advanced) R.string.choose_clip else R.string.download)
+        download.setText(if (advanced) R.string.trim_video else R.string.download)
+        download.setHomeIcon(if (advanced) R.drawable.ui_trim else R.drawable.ui_download)
     }
 
     private fun readyHint() = if (advanced) R.string.advanced_ready else R.string.simple_ready
@@ -778,7 +779,7 @@ class SpikeActivity : Activity() {
     }
 
     private fun editClip(submitted: String, url: String, requested: DownloadOptions) {
-        runOperation(R.string.starting_download, cancellable = true, action = {
+        runOperation(R.string.opening_trim_editor, cancellable = true, action = {
             MediaResolver.prepare(applicationContext, url, requested)
         }) { result ->
             result.onSuccess { source ->
@@ -844,7 +845,8 @@ class SpikeActivity : Activity() {
         submitted: String, url: String, requested: DownloadOptions, source: PreparedVideo? = null,
     ) {
         submit(
-            R.string.starting_download, clearInput = submitted, cancellable = true,
+            if (source?.isFresh == true) R.string.preparing_clip else R.string.starting_download,
+            clearInput = submitted, cancellable = true,
             onFailure = { error ->
                 if (error is ResolutionFallback) {
                     withResolution(error.source, requested) { startDownload(submitted, url, it, error.source) }
@@ -964,7 +966,7 @@ class SpikeActivity : Activity() {
         status.setText(message)
         progress.isIndeterminate = true
         progress.visibility = View.VISIBLE
-        if (message == R.string.starting_download) status.postDelayed({
+        if (message == R.string.starting_download || message == R.string.opening_trim_editor) status.postDelayed({
             if (operation === work && !work.cancelled && status.text == getString(message)) {
                 status.setText(R.string.still_looking)
             }

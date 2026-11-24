@@ -5,6 +5,7 @@
     <string name="youtube_input">YouTube link or video ID</string>
     <string name="clear_link">Clear link</string>
     <string name="download">Download</string>
+    <string name="trim_video">Trim video</string>
     <string name="choose_clip">Choose clip</string>
     <string name="audio_on">Audio on</string>
     <string name="audio_off">Audio off</string>
@@ -33,9 +34,8 @@
     <string name="trim_position">%1$s / %2$s</string>
     <string name="trim_selected">%1$s selected</string>
     <string name="timeline_description">Clip timeline, %1$s to %2$s</string>
-    <string name="trim_editor_hint">Adjust the handles or enter times. Select up to five minutes.</string>
+    <string name="trim_editor_hint">Set start and end, up to five minutes. The start may move forward to the next keyframe to preserve quality.</string>
     <string name="trim_remote_hint">Left and right move %1$s. OK switches handles.</string>
-    <string name="trim_aligned_start">Start moved to %1$s to preserve quality. Check the preview or press Download to confirm.</string>
     <string name="trim_checking">Checking the trim points…</string>
     <string name="trim_could_not_align">Could not find a cut point. Check the connection and try again.</string>
     <string name="trim_outside_source">Choose an end at or before the end of the video.</string>
@@ -54,9 +54,10 @@
     <string name="history_empty">Your recent wallpapers will appear here</string>
     <string name="simple_ready">Add a link, choose a length, then download.</string>
     <string name="advanced_ready">Add a link to open the clip editor.</string>
+    <string name="opening_trim_editor">Finding a compatible stream for the trim editor…</string>
     <string name="invalid_share">Share a YouTube link or video ID.</string>
     <string name="starting_download">1 of 3 · Checking the link and finding a compatible stream…</string>
-    <string name="still_looking">1 of 3 · Still looking for a compatible stream. You can cancel at any time.</string>
+    <string name="still_looking">Still looking for a compatible stream. You can cancel at any time.</string>
     <string name="preparing_clip">2 of 3 · Copying the clip…</string>
     <string name="clip_progress">2 of 3 · Copying the clip · %1$d%%</string>
     <string name="saving_clip">3 of 3 · Saving the clip…</string>

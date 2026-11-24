@@ -147,7 +147,7 @@ internal object SourceClip {
                                 .firstOrNull()
                             val error = if (response?.responseCode in listOf(401, 403)) {
                                 IllegalArgumentException(
-                                    "The source declined this media request. Try again later or import a local MP4.",
+                                    "The source declined this media request. Try again later or choose another video.",
                                 )
                             } else {
                                 exportException

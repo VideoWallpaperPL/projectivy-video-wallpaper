@@ -89,7 +89,6 @@ internal class TrimEditor(
     private var dialog: AlertDialog? = null
     private var checking = false
     private var showingRemoteHint = false
-    private var confirmedRange: ClipRange? = null
     private var displayedSecond = -1L
     private var nextSeekUs = 0L
     private val delayedSeek = Runnable { seekTo(nextSeekUs) }
@@ -265,8 +264,7 @@ internal class TrimEditor(
     private fun moveHandle(changeStart: Boolean, timeUs: Long) {
         if (checking) return
         range = range.moveBoundary(changeStart, timeUs, source.durationUs)
-        if (confirmedRange != null && !showingRemoteHint) info.setText(R.string.trim_editor_hint)
-        confirmedRange = null
+        if (!showingRemoteHint) info.setText(R.string.trim_editor_hint)
         updateFields()
         player?.pause()
         nextSeekUs = if (changeStart) range.startUs else lastFramePosition()
@@ -278,7 +276,7 @@ internal class TrimEditor(
     private fun updateFields() {
         start.setText(trimTime(range.startUs, range.startUs % 1_000_000 != 0L))
         end.setText(trimTime(range.endUs, range.endUs % 1_000_000 != 0L))
-        val showFraction = confirmedRange != null && range.durationUs % 1_000_000 != 0L
+        val showFraction = range.durationUs % 1_000_000 != 0L
         length.text = activity.getString(R.string.trim_selected, trimTime(range.durationUs, showFraction))
         timeline.showSelection(range)
     }
@@ -317,7 +315,7 @@ internal class TrimEditor(
     private fun checkAndDownload() {
         if (!commitFields()) return
         val requested = range
-        if (requested.startUs == 0L || confirmedRange == requested) {
+        if (requested.startUs == 0L) {
             download(requested)
             dismiss()
             return
@@ -331,20 +329,12 @@ internal class TrimEditor(
                 if (dialog?.isShowing != true) return@runOnUiThread
                 setChecking(false)
                 result.onSuccess { adjusted ->
-                    if (adjusted == requested) {
-                        download(adjusted)
-                        dismiss()
-                    } else {
-                        range = adjusted
-                        confirmedRange = adjusted
-                        updateFields()
-                        seekTo(range.startUs)
-                        info.text = activity.getString(R.string.trim_aligned_start, trimTime(adjusted.startUs, true))
-                        downloadButton.requestFocus()
-                    }
+                    download(adjusted)
+                    dismiss()
                 }.onFailure {
                     info.text = if (it is IllegalArgumentException) it.message
                     else activity.getString(R.string.trim_could_not_align)
+                    downloadButton.requestFocus()
                 }
             }
         }
