@@ -34,13 +34,14 @@ Follow the [Android TV installation instructions](#install-on-android-tv) after 
 
 </details>
 
-The screenshots use original sample artwork.
+These v0.7 screenshots use original sample artwork.
 
 ## Features
 
-- **Local import.** Add a 720p or 1080p H.264 MP4. The app keeps its audio when present.
-- **On-device downloads.** Paste or share a YouTube link or video ID. Pick a clip length from one to five minutes and turn audio on or off before choosing **Download**. The app copies compatible 720p H.264 video and optional AAC audio into an MP4 without re-encoding either track. It prefers 30 fps when available.
-- **Download progress.** Follow source lookup, copying, and saving. The app selects and previews each finished clip. If multiple wallpapers are selected, the new clip joins them. YouTube clips have a size limit of 32 MiB per selected minute. Local MP4 imports keep the two-minute limit.
+- **Local import.** Open **More → Add MP4 file** to import 720p or 1080p H.264 video. The app keeps audio when present. Local MP4 imports keep the two-minute limit.
+- **On-device downloads.** Paste or share a YouTube link or video ID. Choose a quick clip length from one to five minutes and turn audio on or off. Choose **Trim** to set start and end times and preview a segment. The app can move the start to the next video keyframe and shows the adjusted range before saving.
+- **Download quality.** 720p is the default. The v0.8 build also offers 1080p when a compatible H.264 stream is available. It offers to switch to 720p if needed. Video and optional AAC audio are copied into the MP4 at source quality. The app prefers streams up to 30 fps when available.
+- **Download progress.** Follow source lookup, copying, and saving, with an option to cancel. Clip size depends on available device storage. The app selects and previews each finished clip. If multiple wallpapers are selected, the new clip joins them.
 - **Wallpaper library.** Browse the 12 newest clips with your TV remote. Select a thumbnail to set it as the background or delete the app’s saved copy.
 - **Multiple wallpapers.** Open **Select wallpapers**, check the clips you want, and choose **Apply selection**. Projectivy receives the individual videos and controls when it switches between them.
 - **Local storage.** Clips and the library stay on the device. YouTube requests go from the TV to YouTube and its media hosts. The app uses no developer backend, analytics, or account credentials.
@@ -62,7 +63,7 @@ adb install -r video-wallpaper-v0.7.apk
 
 Android requires the same signing key for an in-place update. If you installed a debug build, back up any clips you want to keep before removing it to install the signed release. [Android app signing](https://developer.android.com/studio/publish/app-signing)
 
-Open **Video Wallpaper for Projectivy Launcher**, add a clip, then choose the provider in **Projectivy Settings → Appearance → Wallpaper → Launcher wallpaper**. Set the video wallpaper volume in Projectivy to hear the clip. [Projectivy release notes](https://github.com/spocky/miproja1/releases/tag/4.60)
+Open **Video Wallpaper for Projectivy Launcher** on the same TV as Projectivy, add a clip, then choose the provider in **Projectivy Settings → Appearance → Wallpaper → Launcher wallpaper**. Set the video wallpaper volume in Projectivy to hear the clip. Clips live in the app's private library on the device where they were saved. [Projectivy release notes](https://github.com/spocky/miproja1/releases/tag/4.60)
 
 ## Downloads and content rights
 

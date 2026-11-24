@@ -1,6 +1,8 @@
 package io.projectyt.spike
 
 import android.content.Context
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.net.Uri
 import android.os.Handler
 import android.os.HandlerThread
@@ -11,6 +13,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.transformer.AssetLoader
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultDecoderFactory
@@ -25,39 +28,88 @@ import java.io.File
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 
-internal data class ClipSource(val uri: Uri, val headers: Map<String, String> = emptyMap())
+internal data class ClipSource(
+    val uri: Uri, val headers: Map<String, String> = emptyMap(), val bitsPerSecond: Long? = null,
+)
 
 @androidx.annotation.OptIn(UnstableApi::class)
 internal object SourceClip {
+    fun alignStart(video: ClipSource, range: ClipRange): ClipRange {
+        if (range.startUs == 0L) return range
+        val extractor = MediaExtractor()
+        try {
+            if (video.uri.scheme == "file") {
+                extractor.setDataSource(checkNotNull(video.uri.path))
+            } else {
+                extractor.setDataSource(video.uri.toString(), video.headers)
+            }
+            val track = (0 until extractor.trackCount).firstOrNull {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME) == MimeTypes.VIDEO_H264
+            } ?: throw IllegalArgumentException("Could not read the video's trim points.")
+            extractor.selectTrack(track)
+            extractor.seekTo(range.startUs, MediaExtractor.SEEK_TO_NEXT_SYNC)
+            val start = extractor.sampleTime
+            require(start in range.startUs until range.endUs) {
+                "There is no cut point in this range. Move the start earlier or extend the end."
+            }
+            return ClipRange(start, range.endUs)
+        } catch (_: java.io.IOException) {
+            throw IllegalArgumentException("Could not find a cut point. Check the connection and try again.")
+        } finally {
+            extractor.release()
+        }
+    }
+
+    fun preview(context: Context, source: PreparedVideo, range: ClipRange) =
+        sourceFactory(context, source.video).createMediaSource(mediaItem(source.video.uri, range)).let { video ->
+            val audio = source.audio ?: return@let video
+            MergingMediaSource(
+                true, true, video,
+                sourceFactory(context, audio).createMediaSource(mediaItem(audio.uri, range)),
+            )
+        }
+
     fun copy(
         context: Context, video: ClipSource, audio: ClipSource?, output: File,
-        durationUs: Long, limitMs: Long, includeAudio: Boolean, onProgress: (Int?) -> Unit,
+        range: ClipRange?, includeAudio: Boolean, storage: ClipStorage, onProgress: (Int?) -> Unit,
     ) {
-        val videoItem = EditedMediaItem.Builder(mediaItem(video.uri, durationUs, limitMs))
+        val videoItem = EditedMediaItem.Builder(mediaItem(video.uri, range))
             .setRemoveAudio(audio != null || !includeAudio)
             .build()
         val sequences = mutableListOf(EditedMediaItemSequence.Builder(listOf(videoItem)).build())
         if (audio != null) {
-            val audioItem = EditedMediaItem.Builder(mediaItem(audio.uri, durationUs, limitMs)).setRemoveVideo(true).build()
+            val audioItem = EditedMediaItem.Builder(mediaItem(audio.uri, range)).setRemoveVideo(true).build()
             sequences.add(EditedMediaItemSequence.Builder(listOf(audioItem)).build())
         }
         val composition = Composition.Builder(sequences).setTransmuxAudio(true).setTransmuxVideo(true).build()
         onProgress(null)
-        export(context, composition, listOfNotNull(video, audio), output, audio != null, onProgress)
+        export(context, composition, listOfNotNull(video, audio), output, audio != null, storage, onProgress)
     }
 
-    private fun mediaItem(source: Uri, durationUs: Long, limitMs: Long) =
+    private fun mediaItem(source: Uri, range: ClipRange?) =
         MediaItem.Builder().setUri(source).setMimeType(MimeTypes.VIDEO_MP4).apply {
-            if (durationUs <= 0 || durationUs > limitMs * 1000) {
+            if (range != null) {
                 setClippingConfiguration(
-                    MediaItem.ClippingConfiguration.Builder().setEndPositionMs(limitMs).build(),
+                    MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionUs(range.startUs)
+                        .setEndPositionUs(range.endUs)
+                        .setStartsAtKeyFrame(true)
+                        .build(),
                 )
             }
         }.build()
 
+    private fun sourceFactory(context: Context, source: ClipSource): DefaultMediaSourceFactory {
+        val dataSource = DefaultHttpDataSource.Factory()
+            .setConnectTimeoutMs(10_000)
+            .setReadTimeoutMs(10_000)
+            .setDefaultRequestProperties(source.headers)
+        return DefaultMediaSourceFactory(context).setDataSourceFactory(dataSource)
+    }
+
     private fun export(
         context: Context, composition: Composition, sources: List<ClipSource>, output: File,
-        requireAudioCopy: Boolean, onProgress: (Int?) -> Unit,
+        requireAudioCopy: Boolean, storage: ClipStorage, onProgress: (Int?) -> Unit,
     ) {
         val thread = HandlerThread("Wallpaper source copy").apply { start() }
         val handler = Handler(thread.looper)
@@ -101,12 +153,7 @@ internal object SourceClip {
                     val decoder = DefaultDecoderFactory.Builder(context).build()
                     val loaders = sources.associateBy(ClipSource::uri) { source ->
                         if (source.uri.scheme == "https") {
-                            val dataSource = DefaultHttpDataSource.Factory()
-                                .setConnectTimeoutMs(10_000)
-                                .setReadTimeoutMs(10_000)
-                                .setDefaultRequestProperties(source.headers)
-                            val mediaSource = DefaultMediaSourceFactory(context).setDataSourceFactory(dataSource)
-                            ExoPlayerAssetLoader.Factory(context, decoder, Clock.DEFAULT, mediaSource)
+                            ExoPlayerAssetLoader.Factory(context, decoder, Clock.DEFAULT, sourceFactory(context, source))
                         } else {
                             ExoPlayerAssetLoader.Factory(context, decoder, Clock.DEFAULT)
                         }
@@ -125,6 +172,12 @@ internal object SourceClip {
 
                     override fun run() {
                         if (finished.isDone) return
+                        try {
+                            storage.check()
+                        } catch (error: LowClipStorage) {
+                            finished.completeExceptionally(error)
+                            return
+                        }
                         if (export.getProgress(progress) == Transformer.PROGRESS_STATE_AVAILABLE &&
                             progress.progress != lastReported
                         ) {
@@ -145,7 +198,7 @@ internal object SourceClip {
         } finally {
             handler.post {
                 try {
-                    if (!finished.isDone) transformer?.cancel()
+                    if (!finished.isDone || finished.isCompletedExceptionally) transformer?.cancel()
                 } finally {
                     thread.quitSafely()
                 }

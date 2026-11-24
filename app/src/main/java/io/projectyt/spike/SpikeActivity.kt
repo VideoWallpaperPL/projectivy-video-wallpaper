@@ -34,7 +34,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
-import android.widget.Space
 import android.widget.TextView
 import android.widget.VideoView
 import tv.projectivy.plugin.wallpaperprovider.api.WallpaperProviderContract
@@ -51,9 +50,12 @@ class SpikeActivity : Activity() {
     private lateinit var downloadNotice: DownloadNotice
     private lateinit var input: EditText
     private lateinit var download: Button
-    private lateinit var addFile: Button
+    private lateinit var more: Button
+    private lateinit var cancelWork: Button
     private lateinit var audioOption: Button
     private lateinit var durationOption: Button
+    private lateinit var resolutionOption: Button
+    private lateinit var trimOption: Button
     private lateinit var selectionButton: Button
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
@@ -65,6 +67,8 @@ class SpikeActivity : Activity() {
     private var working = false
     private var previewId: String? = null
     private var options = DownloadOptions()
+    private var operation: Operation? = null
+    private var trimEditor: TrimEditor? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +77,7 @@ class SpikeActivity : Activity() {
         options = DownloadOptions(
             savedInstanceState?.getInt("downloadMinutes", 2) ?: 2,
             savedInstanceState?.getBoolean("downloadAudio", true) ?: true,
+            savedInstanceState?.getInt("downloadHeight", DEFAULT_HEIGHT) ?: DEFAULT_HEIGHT,
         )
         input = EditText(this).apply {
             setHint(R.string.youtube_input)
@@ -92,12 +97,15 @@ class SpikeActivity : Activity() {
             }
         }
         download = button(R.string.download, primary = true, action = ::downloadLink)
-        addFile = button(R.string.add_file, action = ::pickFile)
+        more = button(R.string.more, action = ::openMore)
+        cancelWork = button(android.R.string.cancel, action = ::cancelOperation).apply { visibility = View.GONE }
         audioOption = button(R.string.audio_on) {
             options = options.copy(includeAudio = !options.includeAudio)
             updateOptions()
         }
         durationOption = button(R.string.clip_length, action = ::chooseDuration)
+        resolutionOption = button(R.string.resolution, action = ::chooseResolution)
+        trimOption = button(R.string.trim, action = ::editClip)
         selectionButton = button(R.string.select_wallpapers, action = ::chooseWallpapers)
         updateOptions()
         status = label("", 12f, MUTED).apply {
@@ -117,7 +125,7 @@ class SpikeActivity : Activity() {
         grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         setContentView(screen())
         acceptSharedInput(intent)
-        if (input.text.isEmpty()) addFile.requestFocus()
+        if (input.text.isEmpty()) download.requestFocus()
     }
 
     override fun onStart() {
@@ -129,11 +137,14 @@ class SpikeActivity : Activity() {
 
     override fun onStop() {
         started = false
+        trimEditor?.dismiss()
         showPreview(null)
         super.onStop()
     }
 
     override fun onDestroy() {
+        trimEditor?.dismiss()
+        operation?.cancel()
         worker.shutdownNow()
         thumbnailWorker.shutdownNow()
         super.onDestroy()
@@ -142,6 +153,7 @@ class SpikeActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt("downloadMinutes", options.minutes)
         outState.putBoolean("downloadAudio", options.includeAudio)
+        outState.putInt("downloadHeight", options.height)
         super.onSaveInstanceState(outState)
     }
 
@@ -160,13 +172,14 @@ class SpikeActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(input, LinearLayout.LayoutParams(0, dp(44), 1f))
                 addView(download, LinearLayout.LayoutParams(WRAP_CONTENT, dp(44)).apply { marginStart = dp(8) })
+                addView(cancelWork, LinearLayout.LayoutParams(WRAP_CONTENT, dp(44)).apply { marginStart = dp(8) })
             })
             addView(LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(audioOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)))
                 addView(durationOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
-                addView(Space(context), LinearLayout.LayoutParams(0, 1, 1f))
-                addView(addFile, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
+                addView(resolutionOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
+                addView(trimOption, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)).apply { marginStart = dp(8) })
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(8) })
             addView(progress, LinearLayout.LayoutParams(MATCH_PARENT, dp(9)).apply { topMargin = dp(8) })
             addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(5) })
@@ -204,7 +217,12 @@ class SpikeActivity : Activity() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(16), dp(24), dp(24))
-            addView(label(getString(R.string.screen_title), 29f, INK, bold = true))
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(label(getString(R.string.screen_title), 29f, INK, bold = true),
+                    LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(more, LinearLayout.LayoutParams(WRAP_CONTENT, dp(38)))
+            })
             addView(top, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(12) })
             addView(LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
@@ -257,7 +275,7 @@ class SpikeActivity : Activity() {
                 if (row > 0) topMargin = dp(10)
             })
         }
-        preferredFocus?.let { id -> (tiles[id] ?: addFile).requestFocus() }
+        preferredFocus?.let { id -> (tiles[id] ?: download).requestFocus() }
         if (history.entries.isEmpty() && !working && status.text.isEmpty()) status.setText(R.string.ready_to_add)
     }
 
@@ -379,7 +397,7 @@ class SpikeActivity : Activity() {
             }
             addView(heading)
             entry.options?.let {
-                addView(label(getString(R.string.clip_option_summary, it.minutes, audioLabel(it)), 12f, MUTED))
+                addView(label(optionSummary(it), 12f, MUTED))
             }
             addView(LinearLayout(context).apply {
                 addView(set, LinearLayout.LayoutParams(0, dp(42), 2f))
@@ -401,10 +419,18 @@ class SpikeActivity : Activity() {
 
     private fun audioLabel(value: DownloadOptions) = getString(if (value.includeAudio) R.string.audio_on else R.string.audio_off)
 
+    private fun optionSummary(value: DownloadOptions): String {
+        val length = value.range?.let { trimTime(it.durationUs) }
+            ?: getString(R.string.clip_length_value, value.minutes)
+        return getString(R.string.clip_option_summary, length, value.height, audioLabel(value))
+    }
+
     private fun updateOptions() {
         audioOption.text = audioLabel(options)
         durationOption.text = getString(R.string.clip_length_value, options.minutes)
         durationOption.contentDescription = getString(R.string.clip_length_description, options.minutes)
+        resolutionOption.text = getString(R.string.resolution_value, options.height)
+        resolutionOption.contentDescription = getString(R.string.resolution_description, options.height)
     }
 
     private fun chooseDuration() {
@@ -418,6 +444,37 @@ class SpikeActivity : Activity() {
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun chooseResolution() {
+        val heights = listOf(DEFAULT_HEIGHT, HD_HEIGHT)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.resolution)
+            .setSingleChoiceItems(heights.map { getString(R.string.resolution_value, it) }.toTypedArray(),
+                heights.indexOf(options.height)) { dialog, which ->
+                options = options.copy(height = heights[which])
+                updateOptions()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun openMore() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.more)
+            .setItems(arrayOf(getString(R.string.add_file), getString(R.string.setup_help))) { _, item ->
+                if (item == 0) pickFile() else showSetup()
+            }
+            .show()
+    }
+
+    private fun showSetup() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.setup_help)
+            .setMessage(R.string.setup_steps)
+            .setPositiveButton(android.R.string.ok, null)
             .show()
     }
 
@@ -449,7 +506,7 @@ class SpikeActivity : Activity() {
                 val checked = entry.id in selected
                 (rows.getChildAt(index) as Button).apply {
                     val title = entry.options?.let {
-                        getString(R.string.selection_download_item, entry.title, it.minutes, audioLabel(it))
+                        getString(R.string.selection_download_item, entry.title, optionSummary(it))
                     } ?: entry.title
                     text = if (checked) getString(R.string.checked_wallpaper, title) else title
                     contentDescription = if (checked) getString(R.string.selected_title, title) else title
@@ -486,7 +543,31 @@ class SpikeActivity : Activity() {
         if (!working) download.requestFocus()
     }
 
-    private fun downloadLink() {
+    private fun downloadLink() = withLink { submitted, url, requested ->
+        startDownload(submitted, url, requested)
+    }
+
+    private fun editClip() = withLink { submitted, url, requested ->
+        runOperation(R.string.starting_download, cancellable = true, action = {
+            MediaResolver.prepare(applicationContext, url, requested)
+        }) { result ->
+            result.onSuccess { source ->
+                withResolution(source, requested) { resolvedOptions ->
+                    if (!started || isDestroyed) return@withResolution
+                    status.setText(R.string.ready_to_add)
+                    showPreview(null)
+                    trimEditor = TrimEditor(this, source, resolvedOptions, worker, onDismiss = {
+                        trimEditor = null
+                        if (started && !working) showPreview(selection.playback())
+                    }) { range ->
+                        startDownload(submitted, url, resolvedOptions.copy(range = range), source)
+                    }.also { it.show() }
+                }
+            }.onFailure(::showError)
+        }
+    }
+
+    private fun withLink(action: (String, String, DownloadOptions) -> Unit) {
         if (working) return
         val submitted = input.text.toString()
         val url = try {
@@ -498,7 +579,7 @@ class SpikeActivity : Activity() {
         getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(input.windowToken, 0)
         val requested = options
         if (downloadNotice.acknowledged()) {
-            startDownload(submitted, url, requested)
+            action(submitted, url, requested)
         } else {
             AlertDialog.Builder(this)
                 .setTitle(R.string.content_notice_title)
@@ -506,15 +587,39 @@ class SpikeActivity : Activity() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton(R.string.acknowledge_notice) { _, _ ->
                     downloadNotice.acknowledge()
-                    startDownload(submitted, url, requested)
+                    action(submitted, url, requested)
                 }
                 .show()
         }
     }
 
-    private fun startDownload(submitted: String, url: String, requested: DownloadOptions) {
-        submit(R.string.starting_download, clearInput = submitted) {
-            MediaResolver.download(applicationContext, url, requested) { reportProgress(it) }
+    private fun withResolution(source: PreparedVideo, requested: DownloadOptions, proceed: (DownloadOptions) -> Unit) {
+        if (source.height == requested.height) {
+            proceed(requested)
+            return
+        }
+        status.setText(R.string.resolution_fallback)
+        if (!started || isDestroyed) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.resolution)
+            .setMessage(R.string.resolution_fallback)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.use_720p) { _, _ -> proceed(requested.copy(height = source.height)) }
+            .show()
+    }
+
+    private fun startDownload(
+        submitted: String, url: String, requested: DownloadOptions, source: PreparedVideo? = null,
+    ) {
+        submit(
+            R.string.starting_download, clearInput = submitted, cancellable = true,
+            onFailure = { error ->
+                if (error is ResolutionFallback) {
+                    withResolution(error.source, requested) { startDownload(submitted, url, it, error.source) }
+                } else showError(error)
+            },
+        ) {
+            MediaResolver.download(applicationContext, url, requested, source) { reportProgress(it) }
         }
     }
 
@@ -543,12 +648,12 @@ class SpikeActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != PICK_VIDEO || resultCode != RESULT_OK || working) return
         val uri = data?.data ?: return
-        submit(R.string.opening_file) { MediaResolver.import(applicationContext, uri) { reportProgress(it) } }
+        submit(R.string.opening_file, cancellable = true) { MediaResolver.import(applicationContext, uri) { reportProgress(it) } }
     }
 
     private fun reportProgress(update: ClipProgress) {
         runOnUiThread {
-            if (isDestroyed || !working) return@runOnUiThread
+            if (isDestroyed || !working || operation?.cancelled == true) return@runOnUiThread
             when (update) {
                 is ClipProgress.Copying -> {
                     val percent = update.percent
@@ -570,49 +675,115 @@ class SpikeActivity : Activity() {
 
     private fun submit(
         message: Int, focusId: String? = null, clearInput: String? = null, successMessage: Int? = null,
+        cancellable: Boolean = false, onFailure: (Throwable) -> Unit = ::showError,
         action: () -> SavedWallpaper?,
     ) {
-        if (working) return
-        working = true
         val previousPlayback = selection.playback()?.id
-        download.isEnabled = false
-        addFile.isEnabled = false
-        audioOption.isEnabled = false
-        durationOption.isEnabled = false
-        selectionButton.isEnabled = false
+        runOperation(message, cancellable, action) { result ->
+            val playback = selection.playback()
+            result.onSuccess { entry ->
+                if (clearInput != null && input.text.toString() == clearInput) input.text.clear()
+                val count = selection.history().selectedIds.size
+                status.text = successMessage?.let(::getString)
+                    ?: playback?.let {
+                        getString(if (count > 1) R.string.preview_title else R.string.active_title, it.title)
+                    }
+                    ?: getString(R.string.ready_to_add)
+                renderHistory(entry?.id ?: focusId)
+                requestWallpaperUpdate()
+            }.onFailure { error ->
+                onFailure(error)
+                renderHistory(focusId)
+                if (previousPlayback != playback?.id) requestWallpaperUpdate()
+            }
+        }
+    }
+
+    private fun <T> runOperation(
+        message: Int, cancellable: Boolean, action: () -> T, complete: (Result<T>) -> Unit,
+    ) {
+        if (working) return
+        val work = Operation()
+        operation = work
+        working = true
+        setControlsEnabled(false)
+        if (cancellable) {
+            download.visibility = View.GONE
+            cancelWork.visibility = View.VISIBLE
+            cancelWork.isEnabled = true
+            cancelWork.requestFocus()
+        }
         showPreview(null)
         status.setText(message)
         progress.isIndeterminate = true
         progress.visibility = View.VISIBLE
+        if (message == R.string.starting_download) status.postDelayed({
+            if (operation === work && !work.cancelled && status.text == getString(message)) {
+                status.setText(R.string.still_looking)
+            }
+        }, 12_000)
         worker.execute {
-            val result = runCatching(action)
+            val result = runCatching { work.run(action) }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
+                operation = null
                 working = false
-                download.isEnabled = true
-                addFile.isEnabled = true
-                audioOption.isEnabled = true
-                durationOption.isEnabled = true
+                setControlsEnabled(true)
+                val restoreFocus = cancelWork.hasFocus()
+                cancelWork.visibility = View.GONE
+                download.visibility = View.VISIBLE
+                if (restoreFocus) download.requestFocus()
                 progress.visibility = View.GONE
-                val playback = selection.playback()
-                result.onSuccess { entry ->
-                    if (clearInput != null && input.text.toString() == clearInput) input.text.clear()
-                    val count = selection.history().selectedIds.size
-                    status.text = successMessage?.let(::getString)
-                        ?: playback?.let {
-                            getString(if (count > 1) R.string.preview_title else R.string.active_title, it.title)
-                        }
-                        ?: getString(R.string.ready_to_add)
-                    renderHistory(entry?.id ?: focusId)
-                    requestWallpaperUpdate()
-                }.onFailure { error ->
-                    status.text = if (error is IllegalArgumentException || error is IllegalStateException) error.message
-                    else getString(R.string.could_not_prepare)
-                    renderHistory(focusId)
-                    if (previousPlayback != playback?.id) requestWallpaperUpdate()
-                }
-                if (started) showPreview(playback)
+                complete(result)
+                if (started && !working && trimEditor == null) showPreview(selection.playback())
             }
+        }
+    }
+
+    private fun setControlsEnabled(enabled: Boolean) {
+        listOf(download, more, audioOption, durationOption, resolutionOption, trimOption)
+            .forEach { it.isEnabled = enabled }
+        selectionButton.isEnabled = enabled && selection.history().entries.size >= 2
+    }
+
+    private fun cancelOperation() {
+        operation?.cancel()
+        cancelWork.isEnabled = false
+        status.setText(R.string.cancelling)
+    }
+
+    private fun showError(error: Throwable) {
+        status.text = when (error) {
+            is InterruptedException -> getString(R.string.cancelled)
+            is IllegalArgumentException, is IllegalStateException -> error.message
+            else -> getString(R.string.could_not_prepare)
+        }
+    }
+
+    private class Operation {
+        @Volatile var cancelled = false
+            private set
+        private var thread: Thread? = null
+
+        fun <T> run(action: () -> T): T {
+            synchronized(this) {
+                if (cancelled) throw InterruptedException()
+                thread = Thread.currentThread()
+            }
+            try {
+                return action()
+            } finally {
+                synchronized(this) {
+                    thread = null
+                    Thread.interrupted()
+                }
+            }
+        }
+
+        @Synchronized
+        fun cancel() {
+            cancelled = true
+            thread?.interrupt()
         }
     }
 

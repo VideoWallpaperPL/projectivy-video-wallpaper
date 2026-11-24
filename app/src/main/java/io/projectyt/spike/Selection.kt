@@ -77,7 +77,15 @@ internal class Selection(private val context: Context) {
             val value = entries.getJSONObject(index)
             val url = value.optString("watchUrl").ifBlank { null }
             val options = url?.let {
-                DownloadOptions(value.optInt("minutes", 2).coerceIn(1, 5), value.optBoolean("includeAudio", true))
+                val start = value.optLong("startUs", -1)
+                val end = value.optLong("endUs", -1)
+                val range = runCatching { ClipRange(start, end) }.getOrNull()
+                DownloadOptions(
+                    value.optInt("minutes", 2).coerceIn(1, 5),
+                    value.optBoolean("includeAudio", true),
+                    if (value.optInt("height") == HD_HEIGHT) HD_HEIGHT else DEFAULT_HEIGHT,
+                    range,
+                )
             }
             entry(value.optString("id"), value.optString("title"), url, options)
         }
@@ -178,7 +186,9 @@ internal class Selection(private val context: Context) {
         val entries = JSONArray()
         history.entries.forEach { entry ->
             entries.put(JSONObject().put("id", entry.id).put("title", entry.title).put("watchUrl", entry.watchUrl)
-                .put("minutes", entry.options?.minutes).put("includeAudio", entry.options?.includeAudio))
+                .put("minutes", entry.options?.minutes).put("includeAudio", entry.options?.includeAudio)
+                .put("height", entry.options?.height).put("startUs", entry.options?.range?.startUs)
+                .put("endUs", entry.options?.range?.endUs))
         }
         val state = JSONObject().put("entries", entries).put("active", history.activeId)
             .put("selected", JSONArray(history.selectedIds.toList()))
