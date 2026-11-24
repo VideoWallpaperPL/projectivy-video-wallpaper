@@ -2,7 +2,7 @@
 
 <img src="docs/app-icon.png" width="96" height="96" alt="App icon showing a mint landscape and a gold sun">
 
-Play videos from your Android TV’s local storage as wallpapers in Projectivy Launcher. Import a compatible MP4, or request a short clip from a YouTube link you are permitted to download.
+Play videos from your Android TV’s local storage as wallpapers in Projectivy Launcher. Save a short clip from a YouTube link you are permitted to download.
 
 > This is an independently developed, unofficial plugin for Projectivy Launcher. It is not affiliated with or endorsed by the Projectivy Launcher developers, Google, or YouTube.
 
@@ -38,12 +38,11 @@ These v0.7 screenshots use original sample artwork.
 
 ## Features
 
-- **Local import.** Open **Settings → Add MP4 file** to import 720p or 1080p H.264 video. The app keeps audio when present. Local MP4 imports keep the two-minute limit.
 - **Simple and Advanced clips.** In **Simple**, add a YouTube link or video ID and use **Download** to save the first one to five minutes. The default is two minutes. Switch to **Advanced** to open the editor when you add a link. Play the preview, set start and end with the two handles or timestamps, then download up to five minutes. With the timeline focused, use the remote’s left and right buttons to adjust a handle and OK to switch handles. The app shows and previews any adjustment to the start before saving.
 - **Download quality.** 720p is the default. The v0.8 build also offers 1080p when a compatible H.264 stream is available. It offers to switch to 720p if needed. Video and optional AAC audio are copied into the MP4 at source quality. The app prefers streams up to 30 fps when available.
 - **Download progress.** Follow source lookup, copying, and saving, with an option to cancel. Clip size depends on available device storage. The app selects and previews each finished clip. If multiple wallpapers are selected, the new clip joins them.
-- **Wallpaper library.** Browse the 12 newest clips in a six-by-two grid on TV. Select a thumbnail to set it as the background or delete the app’s saved copy.
-- **Multiple wallpapers.** Open **Select wallpapers**, check the clips you want, and choose **Apply selection**. Projectivy receives the individual videos and controls when it switches between them.
+- **Wallpaper library.** Browse the 12 newest clips in a six-by-two grid on TV. Select a thumbnail to set it as the background, save an MP4 copy to Downloads, or delete the app’s saved copy. On Android 7 through 9, use the system file picker to choose where to save the copy.
+- **Multiple wallpapers.** Open **Select wallpapers**, check the clips you want in the thumbnail grid, and choose **Apply selection**. Projectivy receives the individual videos and controls when it switches between them.
 - **Local storage.** Clips and the library stay on the device. YouTube requests go from the TV to YouTube and its media hosts. The app uses no developer backend, analytics, or account credentials.
 
 ## Install on Android TV
@@ -67,7 +66,7 @@ Open **Video Wallpaper for Projectivy Launcher** on the same TV as Projectivy, a
 
 ## Downloads and content rights
 
-Downloads start only when you choose **Download**. A link shared to the app fills in the input field. The app supports public and unlisted prerecorded videos when compatible streams are available. Sign-in, access restrictions, and unavailable formats can prevent a download. If YouTube declines a media request or the video is unsupported, use a compatible local MP4 you have permission to use.
+Downloads from YouTube start only when you choose **Download**. A link shared to the app fills in the input field. The app supports public and unlisted prerecorded videos when compatible streams are available. Sign-in, access restrictions, and unavailable formats can prevent a download.
 
 See [Disclaimer](DISCLAIMER.md) for content rights, platform terms, and hosting policies.
 

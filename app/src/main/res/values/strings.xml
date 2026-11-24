@@ -45,10 +45,6 @@
     <string name="content_notice_title">Before you download</string>
     <string name="content_notice">This application allows you to use locally stored videos as wallpapers. Only download or use content when you have the necessary rights or permission. Some video platforms restrict downloading under their terms of service.</string>
     <string name="acknowledge_notice">I understand</string>
-    <string name="add_file">Add MP4 file</string>
-    <string name="settings">Settings</string>
-    <string name="setup_help">TV setup</string>
-    <string name="setup_steps">Install this app on the same TV as Projectivy Launcher, then add or select a clip here.\n\nOn the TV, open Projectivy Settings → Appearance → Wallpaper → Launcher wallpaper and choose Video Wallpaper for Projectivy Launcher. External providers require Projectivy Premium.\n\nSaved clips stay in the private library on this device. Selecting a clip on your phone does not change another device.</string>
     <string name="preview_label">Background preview</string>
     <string name="play_background_preview">Play background preview</string>
     <string name="pause_background_preview">Pause background preview</string>
@@ -61,7 +57,6 @@
     <string name="invalid_share">Share a YouTube link or video ID.</string>
     <string name="starting_download">1 of 3 · Checking the link and finding a compatible stream…</string>
     <string name="still_looking">1 of 3 · Still looking for a compatible stream. You can cancel at any time.</string>
-    <string name="opening_file">1 of 3 · Opening the file…</string>
     <string name="preparing_clip">2 of 3 · Copying the clip…</string>
     <string name="clip_progress">2 of 3 · Copying the clip · %1$d%%</string>
     <string name="saving_clip">3 of 3 · Saving the clip…</string>
@@ -75,18 +70,22 @@
     <string name="selection_download_item">%1$s · %2$s</string>
     <string name="selection_instructions">Choose the videos Projectivy can rotate through.</string>
     <string name="apply_wallpapers">Apply selection</string>
-    <string name="checked_wallpaper">✓  %1$s</string>
     <string name="selected">Selected</string>
     <string name="selected_title">Selected · %1$s</string>
     <string name="active">Active</string>
     <string name="active_title">Active · %1$s</string>
     <string name="set_background">Set background</string>
     <string name="delete">Delete</string>
+    <string name="download_video">Download video</string>
     <string name="wallpaper_actions">Wallpaper actions</string>
     <string name="setting_background">Setting background…</string>
     <string name="deleting_background">Deleting video…</string>
     <string name="deleted_from_library">Deleted the saved video.</string>
-    <string name="no_file_picker">No file picker is available on this device.</string>
+    <string name="no_save_picker">No save location picker is available on this device.</string>
+    <string name="saving_video_copy">Saving a video copy…</string>
+    <string name="saved_to_downloads">Video saved to Downloads.</string>
+    <string name="video_copy_saved">Video copy saved.</string>
+    <string name="video_copy_failed">Could not save a video copy. Check the available storage and try again.</string>
     <string name="could_not_prepare">Could not save the wallpaper. Try again.</string>
     <string name="preview_unavailable">The wallpaper is saved. The preview could not play.</string>
     <string name="provider_uuid" translatable="false">ec99775c-cabf-4238-afae-f6a624e1b64d</string>

@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
-import android.provider.OpenableColumns
 import android.os.SystemClock
 import android.util.AtomicFile
 import android.util.Log
@@ -29,7 +28,6 @@ internal class ResolutionFallback(val source: PreparedVideo) : IllegalArgumentEx
 
 internal object MediaResolver {
     private val headerNames = listOf("User-Agent", "Accept", "Accept-Language", "Referer", "Origin", "Sec-Fetch-Mode")
-    private val importLimits = DownloadOptions()
 
     @Synchronized
     fun download(
@@ -108,24 +106,10 @@ internal object MediaResolver {
         return ClipSource(source, requestHeaders, bitsPerSecond.takeIf { it in 1..200_000_000 })
     }
 
-    @Synchronized
-    fun import(context: Context, uri: Uri, onProgress: (ClipProgress) -> Unit): SavedWallpaper {
-        val details = inspect(context, uri)
-        val title = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-            ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
-            ?.removeSuffix(".mp4")?.takeIf(String::isNotBlank) ?: "Imported video"
-        val length = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
-        return saveClip(
-            context, ClipSource(uri), title, null, details.durationUs, importLimits, onProgress,
-            copyBytes = length.takeIf { it > 0 && details.canCopy(importLimits.requestedDurationUs) },
-            includeAudio = details.hasAudio,
-        )
-    }
-
     private fun saveClip(
-        context: Context, video: ClipSource, title: String, watchUrl: String?, durationUs: Long,
+        context: Context, video: ClipSource, title: String, watchUrl: String, durationUs: Long,
         limits: DownloadOptions, onProgress: (ClipProgress) -> Unit,
-        includeAudio: Boolean, audio: ClipSource? = null, copyBytes: Long? = null,
+        includeAudio: Boolean, audio: ClipSource?,
     ): SavedWallpaper {
         val output = File(context.cacheDir, "wallpaper-pending.mp4")
         val storage = ClipStorage(context.cacheDir)
@@ -137,43 +121,24 @@ internal object MediaResolver {
         output.delete()
         try {
             checkInterrupted()
-            storage.check(copyBytes ?: estimatedBytes)
-            if (copyBytes != null) {
-                val input = context.contentResolver.openInputStream(video.uri)
-                    ?: throw IllegalArgumentException("Could not open the selected file.")
-                input.use { from ->
-                    output.outputStream().use { to ->
-                        val buffer = ByteArray(64 * 1024)
-                        var remaining = copyBytes
-                        while (true) {
-                            checkInterrupted()
-                            val read = from.read(buffer)
-                            if (read < 0) break
-                            remaining -= read
-                            if (remaining < 0) storage.check(read.toLong())
-                            to.write(buffer, 0, read)
-                        }
-                    }
+            storage.check(estimatedBytes)
+            try {
+                val clip = range.takeUnless { range.startUs == 0L && durationUs == range.endUs }
+                SourceClip.copy(context, video, audio, output, clip, includeAudio, storage) {
+                    onProgress(ClipProgress.Copying(it))
                 }
-            } else {
-                try {
-                    val clip = range.takeUnless { range.startUs == 0L && durationUs == range.endUs }
-                    SourceClip.copy(context, video, audio, output, clip, includeAudio, storage) {
-                        onProgress(ClipProgress.Copying(it))
-                    }
-                } catch (error: InterruptedException) {
-                    throw error
-                } catch (error: IllegalArgumentException) {
-                    throw error
-                } catch (error: Exception) {
-                    storage.failure(error)?.let { throw it }
-                    // The exception can include the signed source URL.
-                    Log.w("ProjectYT", "Video preparation failed: ${error.javaClass.simpleName}")
-                    throw IllegalArgumentException("Could not copy this video. Try another source.")
-                }
+            } catch (error: InterruptedException) {
+                throw error
+            } catch (error: IllegalArgumentException) {
+                throw error
+            } catch (error: Exception) {
+                storage.failure(error)?.let { throw it }
+                // The exception can include the signed source URL.
+                Log.w("ProjectYT", "Video preparation failed: ${error.javaClass.simpleName}")
+                throw IllegalArgumentException("Could not copy this video. Try another source.")
             }
             val result = inspect(context, Uri.fromFile(output))
-            require(!result.hasOtherTracks && (watchUrl == null || result.height == limits.height)) {
+            require(!result.hasOtherTracks && result.height == limits.height) {
                 "The saved clip did not match the requested video format."
             }
             require(result.durationUs in 1..(range.durationUs + CLIP_DURATION_TOLERANCE_US)) {
@@ -183,7 +148,7 @@ internal object MediaResolver {
             storage.check()
             checkInterrupted()
             onProgress(ClipProgress.Saving)
-            return Selection(context).add(output, title, watchUrl, limits.takeIf { watchUrl != null })
+            return Selection(context).add(output, title, watchUrl, limits)
         } catch (error: Exception) {
             throw storage.failure(error) ?: error
         } finally {

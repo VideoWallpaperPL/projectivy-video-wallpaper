@@ -16,7 +16,6 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
 import android.media.MediaMetadataRetriever
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
@@ -51,13 +50,13 @@ class SpikeActivity : Activity() {
     private val thumbnails = LruCache<String, Bitmap>(HISTORY_LIMIT)
     private val thumbnailRequests = mutableSetOf<String>()
     private val thumbnailViews = mutableMapOf<String, ImageView>()
+    private val pickerThumbnails = mutableMapOf<String, ImageView>()
     private val tiles = mutableMapOf<String, View>()
     private lateinit var selection: Selection
     private lateinit var downloadNotice: DownloadNotice
     private lateinit var input: EditText
     private lateinit var clearLink: ImageButton
     private lateinit var download: Button
-    private lateinit var more: Button
     private lateinit var cancelWork: Button
     private lateinit var audioOption: Button
     private lateinit var resolutionOption: Button
@@ -77,6 +76,7 @@ class SpikeActivity : Activity() {
     private var attachedEditorPending = false
     private var previewId: String? = null
     private var previewPaused = false
+    private var pendingCopyId: String? = null
     private var options = DownloadOptions()
     private var operation: Operation? = null
     private var trimEditor: TrimEditor? = null
@@ -88,6 +88,7 @@ class SpikeActivity : Activity() {
         super.onCreate(savedInstanceState)
         selection = Selection(this)
         downloadNotice = DownloadNotice(this)
+        pendingCopyId = savedInstanceState?.getString("pendingCopyId")
         advanced = savedInstanceState?.getBoolean("advancedMode") ?: false
         options = DownloadOptions(
             minutes = savedInstanceState?.getInt("simpleMinutes", 2) ?: 2,
@@ -128,7 +129,6 @@ class SpikeActivity : Activity() {
         download = button(R.string.download, primary = true, action = ::openCurrentLink).apply {
             homeButton(R.drawable.ui_download, prominent = true)
         }
-        more = button(R.string.settings, action = ::openMore).apply { homeButton(R.drawable.ui_settings) }
         cancelWork = button(android.R.string.cancel, action = ::cancelOperation).apply {
             homeButton(R.drawable.ui_close)
             visibility = View.GONE
@@ -200,6 +200,7 @@ class SpikeActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("pendingCopyId", pendingCopyId)
         outState.putBoolean("advancedMode", advanced)
         outState.putInt("simpleMinutes", options.minutes)
         outState.putBoolean("downloadAudio", options.includeAudio)
@@ -290,7 +291,6 @@ class SpikeActivity : Activity() {
             addView(label(getString(R.string.screen_title), if (wideLayout) 27f else 20f, INK, bold = true))
             addView(label(getString(R.string.screen_subtitle), if (wideLayout) 14f else 12f, MUTED))
         }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        addView(more, LinearLayout.LayoutParams(WRAP_CONTENT, dp(35)).apply { marginStart = dp(8) })
     }
 
     private fun composer(): View {
@@ -416,15 +416,8 @@ class SpikeActivity : Activity() {
     }
 
     private fun tile(entry: SavedWallpaper, selected: Boolean, multiple: Boolean): View {
-        val card = WallpaperTile(this).apply {
-            isFocusable = true
-            isClickable = true
-            background = surface(SLOT, 13, BORDER)
-            clipToOutline = true
-            foreground = stateDrawable(
-                surface(Color.TRANSPARENT, 13, OUTLINE, 3),
-                surface(Color.TRANSPARENT, 13, if (selected) ACCENT else BORDER, if (selected) 2 else 1),
-            )
+        val card = thumbnailCard(entry, thumbnailViews).apply {
+            foreground = tileOutline(selected)
             contentDescription = when {
                 selected && multiple -> getString(R.string.selected_title, entry.title)
                 selected -> getString(R.string.active_title, entry.title)
@@ -432,21 +425,6 @@ class SpikeActivity : Activity() {
             }
             setOnClickListener { if (!working) openActions(entry) }
         }
-        val image = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-        card.addView(image, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-        val caption = label(entry.title, if (wideLayout) 13f else 11f, INK, bold = true).apply {
-            gravity = Gravity.BOTTOM or Gravity.START
-            setSingleLine()
-            ellipsize = TextUtils.TruncateAt.END
-            setPadding(dp(9), 0, dp(9), dp(7))
-            background = gradient(
-                GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xF109101A.toInt(), 0xB009101A.toInt(), Color.TRANSPARENT),
-            )
-        }
-        card.addView(caption, FrameLayout.LayoutParams(MATCH_PARENT, dp(36), Gravity.BOTTOM))
         if (selected) {
             val badge = label(getString(if (multiple) R.string.selected else R.string.active), 10f, DARK_INK, bold = true).apply {
                 setPadding(dp(8), dp(3), dp(8), dp(3))
@@ -459,15 +437,57 @@ class SpikeActivity : Activity() {
             })
         }
         tiles[entry.id] = card
-        thumbnailViews[entry.id] = image
-        loadThumbnail(entry)
         return card
+    }
+
+    private fun thumbnailCard(
+        entry: SavedWallpaper, images: MutableMap<String, ImageView>, showOptions: Boolean = false,
+    ) = WallpaperTile(this).apply {
+        isFocusable = true
+        background = surface(SLOT, 13, BORDER)
+        clipToOutline = true
+        val image = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        addView(image, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.BOTTOM
+            setPadding(dp(9), 0, dp(9), dp(7))
+            background = gradient(
+                GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0xF109101A.toInt(), 0xB009101A.toInt(), Color.TRANSPARENT),
+            )
+            addView(label(entry.title, if (wideLayout) 13f else 11f, INK, bold = true).apply {
+                setSingleLine()
+                ellipsize = TextUtils.TruncateAt.END
+            })
+            if (showOptions) entry.options?.let {
+                addView(label(optionSummary(it), 10f, INK).apply {
+                    setSingleLine()
+                    ellipsize = TextUtils.TruncateAt.END
+                })
+            }
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }, FrameLayout.LayoutParams(MATCH_PARENT, dp(if (showOptions) 51 else 36), Gravity.BOTTOM))
+        images[entry.id] = image
+        loadThumbnail(entry)
+    }
+
+    private fun tileOutline(selected: Boolean, selectedColor: Int = ACCENT) = stateDrawable(
+        surface(Color.TRANSPARENT, 13, OUTLINE, 3),
+        surface(Color.TRANSPARENT, 13, if (selected) selectedColor else BORDER, if (selected) 2 else 1),
+    )
+
+    private fun displayThumbnail(id: String, bitmap: Bitmap) {
+        thumbnailViews[id]?.setImageBitmap(bitmap)
+        pickerThumbnails[id]?.setImageBitmap(bitmap)
     }
 
     private fun loadThumbnail(entry: SavedWallpaper) {
         val cached = thumbnails.get(entry.id)
         if (cached != null) {
-            thumbnailViews[entry.id]?.setImageBitmap(cached)
+            displayThumbnail(entry.id, cached)
             return
         }
         if (!thumbnailRequests.add(entry.id)) return
@@ -501,7 +521,7 @@ class SpikeActivity : Activity() {
                 thumbnailRequests.remove(entry.id)
                 if (bitmap != null && file.isFile) {
                     thumbnails.put(entry.id, bitmap)
-                    thumbnailViews[entry.id]?.setImageBitmap(bitmap)
+                    displayThumbnail(entry.id, bitmap)
                 }
             }
         }
@@ -518,14 +538,18 @@ class SpikeActivity : Activity() {
             dialog.dismiss()
             submit(R.string.setting_background, entry.id) { selection.activate(entry.id) }
         }
-        val delete = button(R.string.delete, destructive = true) {
+        val save = iconButton(R.drawable.ui_download, R.string.download_video) {
+            dialog.dismiss()
+            downloadSavedVideo(entry)
+        }
+        val delete = iconButton(R.drawable.ui_trash, R.string.delete) {
             dialog.dismiss()
             submit(R.string.deleting_background, entry.id, successMessage = R.string.deleted_from_library) {
                 selection.delete(entry.id)
                 thumbnails.remove(entry.id)
                 selection.history().active
             }
-        }
+        }.apply { imageTintList = ColorStateList.valueOf(DANGER) }
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(16), dp(18), dp(16))
@@ -545,8 +569,9 @@ class SpikeActivity : Activity() {
                 addView(label(optionSummary(it), 12f, MUTED))
             }
             addView(LinearLayout(context).apply {
-                addView(set, LinearLayout.LayoutParams(0, dp(42), 2f))
-                addView(delete, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(8) })
+                addView(set, LinearLayout.LayoutParams(0, dp(44), 1f))
+                addView(save, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(8) })
+                addView(delete, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(8) })
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(14) })
         }
         dialog.setContentView(panel)
@@ -615,74 +640,111 @@ class SpikeActivity : Activity() {
             .show()
     }
 
-    private fun openMore() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.settings)
-            .setItems(arrayOf(getString(R.string.add_file), getString(R.string.setup_help))) { _, item ->
-                if (item == 0) pickFile() else showSetup()
-            }
-            .show()
-    }
-
-    private fun showSetup() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.setup_help)
-            .setMessage(R.string.setup_steps)
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
-    }
-
     private fun chooseWallpapers() {
         val history = selection.history()
         if (working || history.entries.size < 2) return
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
         val selected = history.selectedIds.toMutableSet()
+        val columns = if (wideLayout) minOf(history.entries.size, 4) else 2
+        val width = dp(42 + columns * 172).coerceAtMost(resources.displayMetrics.widthPixels - dp(32))
+        val gap = dp(10)
+        val rowCount = (history.entries.size + columns - 1) / columns
+        val tileWidth = (width - dp(40) - gap * (columns - 1) + columns - 1) / columns
+        val gridHeight = rowCount * ((tileWidth * 9 + 8) / 16) + (rowCount - 1) * gap
+        val maxGridHeight = (resources.displayMetrics.heightPixels - dp(164)).coerceAtLeast(dp(60))
+        val count = label("", 13f, MINT, bold = true).apply {
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        val cancel = button(android.R.string.cancel) { dialog.dismiss() }
+        val apply = button(R.string.apply_wallpapers, primary = true) {
+            val requested = selected.toSet()
+            dialog.dismiss()
+            if (requested != history.selectedIds) submit(R.string.setting_background) { selection.select(requested) }
+        }
+        fun updateCount() {
+            count.text = resources.getQuantityString(R.plurals.wallpapers_selected, selected.size, selected.size)
+            apply.isEnabled = selected.isNotEmpty()
+        }
+        updateCount()
         val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        history.entries.chunked(columns).forEachIndexed { index, entries ->
+            val row = LinearLayout(this)
+            repeat(columns) { column ->
+                val entry = entries.getOrNull(column)
+                val card = entry?.let {
+                    pickerCard(it, it.id in selected) {
+                        val checked = if (selected.remove(it.id)) false else selected.add(it.id)
+                        updateCount()
+                        checked
+                    }
+                } ?: View(this)
+                row.addView(card, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
+                    if (column > 0) marginStart = gap
+                })
+            }
+            rows.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                if (index > 0) topMargin = gap
+            })
+        }
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(8), dp(22), 0)
+            setPadding(dp(20), dp(16), dp(20), dp(14))
+            background = surface(PANEL, 18, BORDER)
+            addView(label(getString(R.string.select_wallpapers), 20f, INK, bold = true))
             addView(label(getString(R.string.selection_instructions), 13f, MUTED))
-            addView(ScrollView(context).apply { addView(rows) }, LinearLayout.LayoutParams(
-                MATCH_PARENT, dp(minOf(history.entries.size * 49, 285)),
-            ))
+            addView(ScrollView(context).apply {
+                isFocusable = false
+                isVerticalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+                addView(rows)
+            }, LinearLayout.LayoutParams(MATCH_PARENT, minOf(gridHeight, maxGridHeight)).apply { topMargin = dp(14) })
+            addView(LinearLayout(context).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(count, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(cancel, LinearLayout.LayoutParams(WRAP_CONTENT, dp(42)))
+                addView(apply, LinearLayout.LayoutParams(WRAP_CONTENT, dp(42)).apply { marginStart = dp(8) })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(14) })
         }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.select_wallpapers)
-            .setView(panel)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.apply_wallpapers) { _, _ ->
-                val requested = selected.toSet()
-                if (requested == history.selectedIds) return@setPositiveButton
-                submit(R.string.setting_background) { selection.select(requested) }
-            }
-            .create()
-        fun updateRows() {
-            history.entries.forEachIndexed { index, entry ->
-                val checked = entry.id in selected
-                (rows.getChildAt(index) as Button).apply {
-                    val title = entry.options?.let {
-                        getString(R.string.selection_download_item, entry.title, optionSummary(it))
-                    } ?: entry.title
-                    text = if (checked) getString(R.string.checked_wallpaper, title) else title
-                    contentDescription = if (checked) getString(R.string.selected_title, title) else title
-                    setTextColor(if (checked) MINT else INK)
-                }
-            }
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = selected.isNotEmpty()
+        dialog.setContentView(panel)
+        dialog.setTitle(getString(R.string.select_wallpapers))
+        dialog.setCanceledOnTouchOutside(true)
+        dialog.setOnDismissListener {
+            pickerThumbnails.clear()
+            if (!working) selectionButton.requestFocus()
         }
-        history.entries.forEach { entry ->
-            rows.addView(button(R.string.select_wallpapers) {
-                if (!selected.remove(entry.id)) selected.add(entry.id)
-                updateRows()
-            }.apply {
-                gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                setSingleLine()
-                ellipsize = TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(MATCH_PARENT, dp(45)).apply { topMargin = dp(4) })
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setDimAmount(0.62f)
         }
         dialog.show()
-        dialog.window?.setBackgroundDrawable(surface(PANEL, 16, BORDER))
-        updateRows()
-        rows.getChildAt(0).requestFocus()
+        dialog.window?.setLayout(width, WRAP_CONTENT)
+        (rows.getChildAt(0) as LinearLayout).getChildAt(0).requestFocus()
+    }
+
+    private fun pickerCard(entry: SavedWallpaper, selected: Boolean, toggle: () -> Boolean): View {
+        val card = thumbnailCard(entry, pickerThumbnails, showOptions = true)
+        val check = iconView(R.drawable.ui_check).apply {
+            imageTintList = ColorStateList.valueOf(DARK_INK)
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+        }
+        card.addView(check, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.TOP or Gravity.END).apply {
+            topMargin = dp(7)
+            marginEnd = dp(7)
+        })
+        card.contentDescription = entry.options?.let {
+            getString(R.string.selection_download_item, entry.title, optionSummary(it))
+        } ?: entry.title
+        fun update(checked: Boolean) {
+            card.isSelected = checked
+            card.foreground = tileOutline(checked, MINT)
+            check.background = if (checked) surface(MINT, 12) else surface(0xB00D131D.toInt(), 12, INK)
+            check.imageAlpha = if (checked) 255 else 0
+        }
+        update(selected)
+        card.setOnClickListener { update(toggle()) }
+        return card
     }
 
     private fun acceptSharedInput(intent: Intent) {
@@ -794,31 +856,46 @@ class SpikeActivity : Activity() {
     }
 
     @Suppress("DEPRECATION")
-    private fun pickFile() {
+    private fun downloadSavedVideo(entry: SavedWallpaper) {
         if (working) return
-        try {
-            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "video/mp4"
-            }, PICK_VIDEO)
-        } catch (_: ActivityNotFoundException) {
-            try {
-                startActivityForResult(Intent(Intent.ACTION_GET_CONTENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "video/mp4"
-                }, PICK_VIDEO)
-            } catch (_: ActivityNotFoundException) {
-                status.setText(R.string.no_file_picker)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            saveVideoCopy(entry.id, R.string.saved_to_downloads) {
+                WallpaperDownload.toDownloads(contentResolver, selection.file(entry), entry.title)
             }
+            return
+        }
+        try {
+            pendingCopyId = entry.id
+            startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = WallpaperDownload.MIME_TYPE
+                putExtra(Intent.EXTRA_TITLE, WallpaperDownload.fileName(entry.title))
+            }, SAVE_VIDEO)
+        } catch (_: ActivityNotFoundException) {
+            pendingCopyId = null
+            status.setText(R.string.no_save_picker)
         }
     }
 
     @Deprecated("Uses the platform document picker from a plain Activity")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != PICK_VIDEO || resultCode != RESULT_OK || working) return
+        if (requestCode != SAVE_VIDEO) return
+        val id = pendingCopyId
+        pendingCopyId = null
+        if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        submit(R.string.opening_file, cancellable = true) { MediaResolver.import(applicationContext, uri) { reportProgress(it) } }
+        saveVideoCopy(id, R.string.video_copy_saved) {
+            val entry = selection.history().entries.firstOrNull { it.id == id }
+            WallpaperDownload.toDocument(contentResolver, entry?.let(selection::file), uri)
+        }
+    }
+
+    private fun saveVideoCopy(id: String?, success: Int, action: () -> Unit) {
+        runOperation(R.string.saving_video_copy, cancellable = false, action = action) { result ->
+            status.setText(if (result.isSuccess) success else R.string.video_copy_failed)
+            tiles[id]?.requestFocus()
+        }
     }
 
     private fun reportProgress(update: ClipProgress) {
@@ -912,7 +989,7 @@ class SpikeActivity : Activity() {
     }
 
     private fun setControlsEnabled(enabled: Boolean) {
-        listOf(download, more, audioOption, resolutionOption, modeOption, durationOption, clearLink)
+        listOf(download, audioOption, resolutionOption, modeOption, durationOption, clearLink)
             .forEach { it.isEnabled = enabled }
         selectionButton.isEnabled = enabled && selection.history().entries.size >= 2
     }
@@ -1001,9 +1078,7 @@ class SpikeActivity : Activity() {
         if (bold) typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
 
-    private fun button(
-        title: Int, primary: Boolean = false, destructive: Boolean = false, action: () -> Unit,
-    ) = Button(this).apply {
+    private fun button(title: Int, primary: Boolean = false, action: () -> Unit) = Button(this).apply {
         setText(title)
         isAllCaps = false
         textSize = 13f
@@ -1018,7 +1093,7 @@ class SpikeActivity : Activity() {
         background = focusBackground(if (primary) MINT else FIELD, 10)
         setTextColor(ColorStateList(
             arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
-            intArrayOf(MUTED, if (primary) DARK_INK else if (destructive) DANGER else INK),
+            intArrayOf(MUTED, if (primary) DARK_INK else INK),
         ))
         setOnClickListener { action() }
     }
@@ -1103,7 +1178,7 @@ class SpikeActivity : Activity() {
     }
 
     private companion object {
-        const val PICK_VIDEO = 1
+        const val SAVE_VIDEO = 1
         val CANVAS = Color.rgb(12, 17, 25)
         val CANVAS_END = Color.rgb(19, 28, 47)
         val PANEL = Color.rgb(24, 34, 47)
